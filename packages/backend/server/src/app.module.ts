@@ -5,6 +5,7 @@ import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { join } from 'path';
 import { BaseModule } from './base';
 import { CoreModule } from './core';
+import { PluginsModule } from './plugins';
 
 @Module({
   imports: [
@@ -29,6 +30,9 @@ import { CoreModule } from './core';
     
     // Import core domain modules
     CoreModule,
+    
+    // Import plugins including AI capabilities
+    PluginsModule,
   ],
   controllers: [],
   providers: [],

@@ -39,11 +39,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Prisma ORM for database access
 - GraphQL API with code-first approach
 - Redis for caching, pub/sub, and distributed locks
+- BullMQ for background job processing and queue management
 - OpenTelemetry for observability
 - Modular structure:
   - `/base`: Core infrastructure (config, database, caching, etc.)
   - `/core`: Domain-specific modules (auth, documents, workspaces, etc.)
   - `/plugins`: Optional features (AI, payments, etc.)
+    - `/plugins/copilot`: AI capabilities with Langgraph JS architecture
   - `/models`: Data models and repositories
 
 ## Key Server Components
@@ -55,10 +57,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - MetricsModule: OpenTelemetry integration with Prometheus
 - StorageModule: Provider-based storage abstraction
 - MutexModule: Redis-based distributed locking
+- QueueModule: BullMQ integration for background job processing
 - AuthModule: Supabase authentication integration with JWT and session management
 - UserModule: User profile and settings management
 - DocumentModule: Document CRUD operations and content management
 - BlobModule: File attachment storage and management
+- CopilotModule: AI capabilities with Langgraph JS Agent architecture
 
 ## Core Domain Modules
 
@@ -112,6 +116,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Permission integration with workspace roles
 - GraphQL resolvers for workspace operations
 
+## Plugin Modules
+
+### AI Copilot System (`/plugins/copilot`)
+- Langgraph JS Agent architecture for AI capabilities
+- Multiple LLM providers (OpenAI, Perplexity, Google, FAL)
+- Graph-based workflow system with specialized nodes
+- Context management with document embedding and semantic search
+- Background processing with BullMQ for AI tasks
+- Real-time streaming responses for text generation
+- Image generation capabilities with multiple models
+- Audio transcription with automatic processing
+- Inline suggestion system for document editing
+- Rate limiting and throttling for API requests
+- GraphQL resolvers and REST endpoints for AI operations
+- Comprehensive documentation and usage examples
+
 ## API Documentation
 - Swagger UI integration at `/api-docs`
 - REST API documentation with authentication support
@@ -129,6 +149,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - Permissions model: Implemented ✅
   - Workspace management: Implemented ✅
   - Testing and documentation: Implemented ✅
+- Phase 3 (Collaboration & Enhanced Document Features): Completed ✅
+  - Document history and versioning: Implemented ✅
+  - Real-time collaboration: Implemented ✅
+  - Workspace invitation system: Implemented ✅
+  - Team management: Implemented ✅
+  - Role-based access control: Implemented ✅
+  - Notification system: Implemented ✅
+  - Public sharing: Implemented ✅
+- Phase 4 (AI Integration & Advanced Features): Completed ✅
+  - Langgraph JS Agent architecture: Implemented ✅
+  - Multiple LLM providers support: Implemented ✅
+  - Document embedding and search: Implemented ✅
+  - AI prompt management: Implemented ✅
+  - Inline suggestion system: Implemented ✅
+  - AI workflows: Implemented ✅
+  - Transcript processing: Implemented ✅
+  - BullMQ job queue integration: Implemented ✅
+  - Rate limiting and throttling: Implemented ✅
+  - AI UI components: Implemented ✅
 
 ## CI/CD Pipeline
 - GitHub Actions workflows for CI/CD

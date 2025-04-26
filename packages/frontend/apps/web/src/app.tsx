@@ -17,8 +17,11 @@ import { StoreManagerClient } from '@affine/nbstore/worker/client';
 import { CacheProvider } from '@emotion/react';
 import { Framework, FrameworkRoot, getCurrentStore } from '@toeverything/infra';
 import { OpClient } from '@toeverything/infra/op';
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
 import { RouterProvider } from 'react-router-dom';
+
+// Import the AI integration
+import { initializeAI } from '@affine/core/pages/ai-integration';
 
 const cache = createEmotionCache();
 
@@ -83,6 +86,18 @@ window.addEventListener('focus', () => {
 });
 frameworkProvider.get(LifecycleService).applicationStart();
 
+// Component to initialize AI integration
+const AIInitializer = () => {
+  useEffect(() => {
+    // Initialize AI components when the app loads
+    initializeAI().then(() => {
+      console.log('AI components initialized');
+    });
+  }, []);
+  
+  return null;
+};
+
 export function App() {
   return (
     <Suspense>
@@ -95,6 +110,7 @@ export function App() {
                 router={router}
                 future={future}
               />
+              <AIInitializer />
             </AffineContext>
           </I18nProvider>
         </CacheProvider>
