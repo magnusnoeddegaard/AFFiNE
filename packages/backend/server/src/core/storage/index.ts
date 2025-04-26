@@ -1,13 +1,8 @@
-import './config';
-
 import { Module } from '@nestjs/common';
-
-import { AvatarStorage, WorkspaceBlobStorage } from './wrappers';
+import { BlobModule } from './blob';
 
 @Module({
-  providers: [WorkspaceBlobStorage, AvatarStorage],
-  exports: [WorkspaceBlobStorage, AvatarStorage],
+  imports: [BlobModule],
+  exports: [BlobModule],
 })
 export class StorageModule {}
-
-export { AvatarStorage, WorkspaceBlobStorage };

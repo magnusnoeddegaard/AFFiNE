@@ -1,76 +1,45 @@
-import './config';
-
-import { join } from 'node:path';
-
-import type { ApolloDriverConfig } from '@nestjs/apollo';
-import { ApolloDriver } from '@nestjs/apollo';
-import { Global, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { GraphQLModule } from '@nestjs/graphql';
-import type { Request, Response } from 'express';
+import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
+import { join } from 'path';
+import { ConfigService } from '@nestjs/config';
+import { LoggingPlugin } from './logging.plugin';
 
-import { Config } from '../config';
-import { mapAnyError } from '../nestjs/exception';
-import { GQLLoggerPlugin } from './logger-plugin';
-
-export type GraphqlContext = {
-  req: Request;
-  res: Response;
-  isAdminQuery: boolean;
-};
-
-@Global()
 @Module({
   imports: [
     GraphQLModule.forRootAsync<ApolloDriverConfig>({
       driver: ApolloDriver,
-      useFactory: (config: Config) => {
-        return {
-          ...config.graphql.apolloDriverConfig,
-          buildSchemaOptions: {
-            numberScalarMode: 'integer',
-          },
-          useGlobalPrefix: true,
-          playground: true,
-          sortSchema: true,
-          autoSchemaFile: join(
-            env.projectRoot,
-            env.testing
-              ? './node_modules/.cache/schema.gql'
-              : './src/schema.gql'
-          ),
-          path: '/graphql',
-          csrfPrevention: {
-            requestHeaders: ['content-type'],
-          },
-          context: ({
-            req,
-            res,
-          }: {
-            req: Request;
-            res: Response;
-          }): GraphqlContext => ({
-            req,
-            res,
-            isAdminQuery: false,
-          }),
-          plugins: [new GQLLoggerPlugin()],
-          formatError: (formattedError, error) => {
-            let ufe = mapAnyError(error);
-
-            // @ts-expect-error allow assign
-            formattedError.extensions = ufe.toJSON();
-            if (env.namespaces.canary) {
-              formattedError.extensions.stacktrace = ufe.stacktrace;
-            }
-            return formattedError;
-          },
-        };
-      },
-      inject: [Config],
+      useFactory: (configService: ConfigService) => ({
+        autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
+        sortSchema: true,
+        playground: configService.get<boolean>('GRAPHQL_PLAYGROUND', true),
+        debug: configService.get<boolean>('GRAPHQL_DEBUG', true),
+        introspection: configService.get<boolean>('GRAPHQL_PLAYGROUND', true),
+        context: ({ req }) => ({ req }),
+        formatError: (error) => {
+          const originalError = error.extensions?.originalError as any;
+          
+          if (!originalError) {
+            return {
+              message: error.message,
+              locations: error.locations,
+              path: error.path,
+            };
+          }
+          
+          return {
+            message: error.message,
+            code: originalError.code || 'INTERNAL_SERVER_ERROR',
+            details: originalError.details || null,
+            locations: error.locations,
+            path: error.path,
+          };
+        },
+      }),
+      inject: [ConfigService],
     }),
   ],
+  providers: [LoggingPlugin],
+  exports: [GraphQLModule],
 })
-export class GqlModule {}
-
-export * from './pagination';
-export { registerObjectType } from './register';
+export class GraphQLConfigModule {}

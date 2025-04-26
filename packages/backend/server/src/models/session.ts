@@ -1,159 +1,220 @@
-import { Inject, Injectable } from '@nestjs/common';
-import {
-  Prisma,
-  type Session,
-  type User,
-  type UserSession,
-} from '@prisma/client';
-
-import { Config } from '../base';
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../base/prisma';
 import { BaseModel } from './base';
+import { Timestamps } from './common';
 
-export type { Session, UserSession };
-export type UserSessionWithUser = UserSession & { user: User };
+/**
+ * Session interface
+ */
+export interface Session extends Timestamps {
+  id: string;
+  userId: string;
+  token: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  lastActive: Date;
+  expires: Date;
+  data: Record<string, any>;
+}
 
+/**
+ * Session model for session operations
+ */
 @Injectable()
-export class SessionModel extends BaseModel {
-  @Inject(Config)
-  private readonly config!: Config;
+export class SessionModel extends BaseModel<Session> {
+  constructor(protected readonly prisma: PrismaService) {
+    super(prisma);
+  }
 
-  async createSession() {
-    return await this.db.session.create({
-      data: {},
+  /**
+   * Get the Prisma model delegate
+   */
+  protected get model() {
+    return this.prisma.session;
+  }
+
+  /**
+   * Find a session by token
+   * @param token The session token
+   * @returns The session or null
+   */
+  async findByToken(token: string): Promise<Session | null> {
+    return this.model.findFirst({
+      where: { token },
     });
   }
 
-  async getSession(id: string) {
-    return await this.db.session.findFirst({
+  /**
+   * Find active sessions for a user
+   * @param userId The user ID
+   * @returns The active sessions
+   */
+  async findActiveByUser(userId: string): Promise<Session[]> {
+    return this.model.findMany({
       where: {
-        id,
+        userId,
+        expires: { gt: new Date() },
       },
+      orderBy: { lastActive: 'desc' },
     });
   }
 
-  async deleteSession(id: string) {
-    const { count } = await this.db.session.deleteMany({
-      where: {
-        id,
-      },
-    });
-    if (count > 0) {
-      this.logger.log(`Deleted session success by id: ${id}`);
-    }
-    return count;
-  }
-
-  async createOrRefreshUserSession(
+  /**
+   * Create a new session
+   * @param userId The user ID
+   * @param ipAddress The IP address
+   * @param userAgent The user agent
+   * @param expiresInHours How many hours until the session expires
+   * @param data Additional session data
+   * @returns The created session
+   */
+  async createSession(
     userId: string,
-    sessionId?: string,
-    ttl = this.config.auth.session.ttl
-  ) {
-    // check whether given session is valid
-    if (sessionId) {
-      const session = await this.db.session.findFirst({
-        where: {
-          id: sessionId,
-        },
-      });
-
-      if (!session) {
-        sessionId = undefined;
-      }
-    }
-
-    if (!sessionId) {
-      const session = await this.createSession();
-      sessionId = session.id;
-    }
-
-    const expiresAt = new Date(Date.now() + ttl * 1000);
-    return await this.db.userSession.upsert({
-      where: {
-        sessionId_userId: {
-          sessionId,
-          userId,
-        },
-      },
-      update: {
-        expiresAt,
-      },
-      create: {
-        sessionId,
-        userId,
-        expiresAt,
-      },
+    ipAddress?: string,
+    userAgent?: string,
+    expiresInHours: number = 24,
+    data: Record<string, any> = {},
+  ): Promise<Session> {
+    // Generate a random token
+    const token = Buffer.from(Math.random().toString(36) + Date.now().toString(36))
+      .toString('base64')
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .substring(0, 32);
+    
+    // Calculate expiration date
+    const expires = new Date();
+    expires.setHours(expires.getHours() + expiresInHours);
+    
+    return this.create({
+      userId,
+      token,
+      ipAddress: ipAddress || null,
+      userAgent: userAgent || null,
+      lastActive: new Date(),
+      expires,
+      data,
     });
   }
 
-  async refreshUserSessionIfNeeded(
-    userSession: UserSession,
-    ttr = this.config.auth.session.ttr
-  ): Promise<Date | undefined> {
-    if (
-      userSession.expiresAt &&
-      userSession.expiresAt.getTime() - Date.now() > ttr * 1000
-    ) {
-      // no need to refresh
-      return;
+  /**
+   * Update session last activity
+   * @param token The session token
+   * @returns The updated session
+   */
+  async updateActivity(token: string): Promise<Session | null> {
+    const session = await this.findByToken(token);
+    
+    if (!session) {
+      return null;
     }
+    
+    return this.update(session.id, {
+      lastActive: new Date(),
+    });
+  }
 
-    const newExpiresAt = new Date(
-      Date.now() + this.config.auth.session.ttl * 1000
-    );
-    await this.db.userSession.update({
-      where: {
-        id: userSession.id,
-      },
+  /**
+   * Extend session expiration
+   * @param token The session token
+   * @param expiresInHours How many hours to extend the session
+   * @returns The updated session
+   */
+  async extendSession(token: string, expiresInHours: number = 24): Promise<Session | null> {
+    const session = await this.findByToken(token);
+    
+    if (!session) {
+      return null;
+    }
+    
+    // Calculate new expiration date
+    const expires = new Date();
+    expires.setHours(expires.getHours() + expiresInHours);
+    
+    return this.update(session.id, {
+      lastActive: new Date(),
+      expires,
+    });
+  }
+
+  /**
+   * Update session data
+   * @param token The session token
+   * @param data The data to update
+   * @returns The updated session
+   */
+  async updateSessionData(
+    token: string,
+    data: Record<string, any>,
+  ): Promise<Session | null> {
+    const session = await this.findByToken(token);
+    
+    if (!session) {
+      return null;
+    }
+    
+    return this.update(session.id, {
       data: {
-        expiresAt: newExpiresAt,
+        ...session.data,
+        ...data,
       },
-    });
-
-    // return the new expiresAt after refresh
-    return newExpiresAt;
-  }
-
-  async findUserSessionsBySessionId<T extends Prisma.UserSessionInclude>(
-    sessionId: string,
-    include?: T
-  ): Promise<(T extends { user: true } ? UserSessionWithUser : UserSession)[]> {
-    return await this.db.userSession.findMany({
-      where: {
-        sessionId,
-        OR: [{ expiresAt: { gt: new Date() } }, { expiresAt: null }],
-      },
-      orderBy: {
-        createdAt: 'asc',
-      },
-      include: include as Prisma.UserSessionInclude,
+      lastActive: new Date(),
     });
   }
 
-  async deleteUserSessions(userId: string, sessionId?: string) {
-    const { count } = await this.db.userSession.deleteMany({
-      where: {
-        userId,
-        sessionId,
-      },
-    });
-    if (count > 0) {
-      this.logger.log(
-        `Deleted user sessions success by userId: ${userId} and sessionId: ${sessionId}`
-      );
+  /**
+   * Invalidate a session
+   * @param token The session token
+   * @returns Whether the session was invalidated
+   */
+  async invalidateSession(token: string): Promise<boolean> {
+    const session = await this.findByToken(token);
+    
+    if (!session) {
+      return false;
     }
-    return count;
+    
+    // Set expiration to now
+    await this.update(session.id, {
+      expires: new Date(),
+    });
+    
+    return true;
   }
 
-  async cleanExpiredUserSessions() {
-    const { count } = await this.db.userSession.deleteMany({
-      where: {
-        expiresAt: {
-          lte: new Date(),
-        },
+  /**
+   * Invalidate all sessions for a user
+   * @param userId The user ID
+   * @param exceptToken Optional token to exclude
+   * @returns The count of invalidated sessions
+   */
+  async invalidateUserSessions(userId: string, exceptToken?: string): Promise<number> {
+    const where: any = { userId, expires: { gt: new Date() } };
+    
+    if (exceptToken) {
+      where.NOT = { token: exceptToken };
+    }
+    
+    const result = await this.prisma.session.updateMany({
+      where,
+      data: {
+        expires: new Date(),
       },
     });
-    if (count > 0) {
-      this.logger.log(`Cleaned ${count} expired user sessions`);
-    }
+    
+    return result.count;
+  }
+
+  /**
+   * Delete expired sessions
+   * @returns The count of deleted sessions
+   */
+  async deleteExpiredSessions(): Promise<number> {
+    const result = await this.prisma.session.deleteMany({
+      where: {
+        expires: { lt: new Date() },
+      },
+    });
+    
+    return result.count;
   }
 }

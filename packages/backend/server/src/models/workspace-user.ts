@@ -1,391 +1,303 @@
 import { Injectable } from '@nestjs/common';
-import { Transactional } from '@nestjs-cls/transactional';
-import { WorkspaceMemberStatus } from '@prisma/client';
-import { groupBy } from 'lodash-es';
-
-import { EventBus, PaginationInput } from '../base';
+import { PrismaService } from '../base/prisma';
 import { BaseModel } from './base';
-import { WorkspaceRole, workspaceUserSelect } from './common';
+import { WorkspaceUser, WorkspaceUserRole, WorkspaceNotificationSettings } from './common';
 
-export { WorkspaceMemberStatus };
-
-declare global {
-  interface Events {
-    'workspace.owner.changed': {
-      workspaceId: string;
-      from: string;
-      to: string;
-    };
-    'workspace.members.roleChanged': {
-      userId: string;
-      workspaceId: string;
-      role: WorkspaceRole;
-    };
-    // below are business events, should be declare somewhere else
-    'workspace.members.updated': {
-      workspaceId: string;
-      count: number;
-    };
-    'workspace.members.removed': {
-      userId: string;
-      workspaceId: string;
-    };
-    'workspace.members.leave': {
-      workspaceId: string;
-      user: {
-        id: string;
-        email: string;
-      };
-    };
-  }
-}
-
+/**
+ * WorkspaceUser model for workspace-user relation operations
+ */
 @Injectable()
-export class WorkspaceUserModel extends BaseModel {
-  constructor(private readonly event: EventBus) {
-    super();
+export class WorkspaceUserModel extends BaseModel<WorkspaceUser> {
+  constructor(protected readonly prisma: PrismaService) {
+    super(prisma);
   }
 
   /**
-   * Set or update the [Owner] of a workspace.
-   * The old [Owner] will be changed to [Admin] if there is already an [Owner].
+   * Get the Prisma model delegate
    */
-  @Transactional()
-  async setOwner(workspaceId: string, userId: string) {
-    const oldOwner = await this.db.workspaceUserRole.findFirst({
-      where: {
-        workspaceId,
-        type: WorkspaceRole.Owner,
-      },
-    });
-
-    // If there is already an owner, we need to change the old owner to admin
-    if (oldOwner) {
-      await this.db.workspaceUserRole.update({
-        where: {
-          id: oldOwner.id,
-        },
-        data: {
-          type: WorkspaceRole.Admin,
-        },
-      });
-    }
-
-    await this.db.workspaceUserRole.upsert({
-      where: {
-        workspaceId_userId: {
-          workspaceId,
-          userId,
-        },
-      },
-      update: {
-        type: WorkspaceRole.Owner,
-      },
-      create: {
-        workspaceId,
-        userId,
-        type: WorkspaceRole.Owner,
-        status: WorkspaceMemberStatus.Accepted,
-      },
-    });
-
-    if (oldOwner) {
-      this.event.emit('workspace.owner.changed', {
-        workspaceId,
-        from: oldOwner.userId,
-        to: userId,
-      });
-      this.logger.log(
-        `Transfer workspace owner of [${workspaceId}] from [${oldOwner.userId}] to [${userId}]`
-      );
-    } else {
-      this.logger.log(`Set workspace owner of [${workspaceId}] to [${userId}]`);
-    }
+  protected get model() {
+    return this.prisma.workspaceUser;
   }
 
   /**
-   * Set or update the Role of a user in a workspace.
-   *
-   * NOTE: do not use this method to set the [Owner] of a workspace. Use {@link setOwner} instead.
+   * Find workspace membership by workspace ID and user ID
+   * @param workspaceId The workspace ID
+   * @param userId The user ID
+   * @returns The workspace-user relation
    */
-  @Transactional()
-  async set(
+  async findByWorkspaceAndUser(
     workspaceId: string,
     userId: string,
-    role: WorkspaceRole,
-    defaultStatus: WorkspaceMemberStatus = WorkspaceMemberStatus.Pending
-  ) {
-    if (role === WorkspaceRole.Owner) {
-      throw new Error('Cannot grant Owner role of a workspace to a user.');
-    }
-
-    const oldRole = await this.get(workspaceId, userId);
-
-    if (oldRole) {
-      if (oldRole.type === role) {
-        return oldRole;
-      }
-
-      const newRole = await this.db.workspaceUserRole.update({
-        where: { id: oldRole.id },
-        data: { type: role },
-      });
-
-      if (oldRole.status === WorkspaceMemberStatus.Accepted) {
-        this.event.emit('workspace.members.roleChanged', {
-          userId,
-          workspaceId,
-          role: newRole.type,
-        });
-      }
-
-      return newRole;
-    } else {
-      return await this.db.workspaceUserRole.create({
-        data: {
-          workspaceId,
-          userId,
-          type: role,
-          status: defaultStatus,
-        },
-      });
-    }
-  }
-
-  async setStatus(
-    workspaceId: string,
-    userId: string,
-    status: WorkspaceMemberStatus
-  ) {
-    return await this.db.workspaceUserRole.update({
-      where: {
-        workspaceId_userId: {
-          workspaceId,
-          userId,
-        },
-      },
-      data: {
-        status,
-      },
-    });
-  }
-
-  async accept(id: string) {
-    await this.db.workspaceUserRole.update({
-      where: { id },
-      data: { status: WorkspaceMemberStatus.Accepted },
-    });
-  }
-
-  async delete(workspaceId: string, userId: string) {
-    await this.db.workspaceUserRole.deleteMany({
+  ): Promise<WorkspaceUser | null> {
+    return this.model.findFirst({
       where: {
         workspaceId,
         userId,
       },
-    });
-  }
-
-  async deleteByUserId(userId: string) {
-    await this.db.workspaceUserRole.deleteMany({
-      where: {
-        userId,
-      },
-    });
-  }
-
-  async get(workspaceId: string, userId: string) {
-    return await this.db.workspaceUserRole.findUnique({
-      where: {
-        workspaceId_userId: {
-          workspaceId,
-          userId,
-        },
-      },
-    });
-  }
-
-  async getById(id: string) {
-    return await this.db.workspaceUserRole.findUnique({
-      where: { id },
     });
   }
 
   /**
-   * Get the **accepted** Role of a user in a workspace.
+   * Find all members of a workspace
+   * @param workspaceId The workspace ID
+   * @param options Query options
+   * @returns The workspace-user relations
    */
-  async getActive(workspaceId: string, userId: string) {
-    return await this.db.workspaceUserRole.findUnique({
-      where: {
-        workspaceId_userId: { workspaceId, userId },
-        status: WorkspaceMemberStatus.Accepted,
-      },
-    });
+  async findByWorkspace(workspaceId: string, options: any = {}): Promise<WorkspaceUser[]> {
+    return this.findMany({ workspaceId }, options);
   }
 
-  async getOwner(workspaceId: string) {
-    const role = await this.db.workspaceUserRole.findFirst({
-      include: {
-        user: {
-          select: workspaceUserSelect,
-        },
-      },
-      where: {
-        workspaceId,
-        type: WorkspaceRole.Owner,
-      },
-    });
-
-    if (!role) {
-      throw new Error('Workspace owner not found');
-    }
-
-    return role.user;
+  /**
+   * Find all workspaces a user is a member of
+   * @param userId The user ID
+   * @param options Query options
+   * @returns The workspace-user relations
+   */
+  async findByUser(userId: string, options: any = {}): Promise<WorkspaceUser[]> {
+    return this.findMany({ userId }, options);
   }
 
-  async getAdmins(workspaceId: string) {
-    const list = await this.db.workspaceUserRole.findMany({
-      include: {
-        user: {
-          select: workspaceUserSelect,
-        },
-      },
-      where: {
-        workspaceId,
-        type: WorkspaceRole.Admin,
-        status: WorkspaceMemberStatus.Accepted,
-      },
-    });
-
-    return list.map(l => l.user);
-  }
-
-  async count(workspaceId: string) {
-    return this.db.workspaceUserRole.count({
-      where: {
-        workspaceId,
-      },
-    });
-  }
-
-  async getUserActiveRoles(
-    userId: string,
-    filter: { role?: WorkspaceRole } = {}
-  ) {
-    return await this.db.workspaceUserRole.findMany({
-      where: {
-        userId,
-        status: WorkspaceMemberStatus.Accepted,
-        type: filter.role,
-      },
-    });
-  }
-
-  async paginate(workspaceId: string, pagination: PaginationInput) {
-    return await Promise.all([
-      this.db.workspaceUserRole.findMany({
-        include: {
-          user: {
-            select: workspaceUserSelect,
-          },
-        },
-        where: {
-          workspaceId,
-          createdAt: pagination.after
-            ? {
-                gte: pagination.after,
-              }
-            : undefined,
-        },
-        orderBy: {
-          createdAt: 'asc',
-        },
-        take: pagination.first,
-        skip: pagination.offset + (pagination.after ? 1 : 0),
-      }),
-      this.count(workspaceId),
-    ]);
-  }
-
-  async search(
+  /**
+   * Add a user to a workspace
+   * @param workspaceId The workspace ID
+   * @param userId The user ID
+   * @param role The user's role
+   * @param invitedBy Optional ID of the user who sent the invitation
+   * @returns The created workspace-user relation
+   */
+  async addMember(
     workspaceId: string,
-    query: string,
-    pagination: PaginationInput
-  ) {
-    return await this.db.workspaceUserRole.findMany({
-      include: { user: { select: workspaceUserSelect } },
-      where: {
-        workspaceId,
-        status: WorkspaceMemberStatus.Accepted,
-        user: {
-          OR: [
-            {
-              email: {
-                contains: query,
-                mode: 'insensitive',
-              },
-            },
-            {
-              name: {
-                contains: query,
-                mode: 'insensitive',
-              },
-            },
-          ],
+    userId: string,
+    role: WorkspaceUserRole,
+    invitedBy?: string,
+  ): Promise<WorkspaceUser> {
+    const existing = await this.findByWorkspaceAndUser(workspaceId, userId);
+    
+    if (existing) {
+      return this.update(existing.id, {
+        role,
+        invitedBy: invitedBy || existing.invitedBy,
+        invitedAt: existing.invitedAt || new Date(),
+        joinedAt: new Date(),
+      });
+    }
+    
+    return this.create({
+      workspaceId,
+      userId,
+      role,
+      invitedBy,
+      invitedAt: invitedBy ? new Date() : null,
+      joinedAt: new Date(),
+      settings: {
+        showOnHomepage: true,
+        defaultDocumentView: 'DOC',
+        notificationSettings: {
+          documentUpdates: true,
+          comments: true,
+          mentions: true,
+          invites: true,
         },
       },
-      orderBy: { createdAt: 'asc' },
-      take: pagination.first,
-      skip: pagination.offset + (pagination.after ? 1 : 0),
     });
   }
 
-  @Transactional()
-  async refresh(workspaceId: string, memberLimit: number) {
-    const usedCount = await this.db.workspaceUserRole.count({
-      where: { workspaceId, status: WorkspaceMemberStatus.Accepted },
-    });
-
-    const availableCount = memberLimit - usedCount;
-
-    if (availableCount <= 0) {
-      return;
+  /**
+   * Remove a user from a workspace
+   * @param workspaceId The workspace ID
+   * @param userId The user ID
+   * @returns Whether the user was removed
+   */
+  async removeMember(workspaceId: string, userId: string): Promise<boolean> {
+    const existing = await this.findByWorkspaceAndUser(workspaceId, userId);
+    
+    if (!existing) {
+      return false;
     }
+    
+    // Check if this is the owner
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+    });
+    
+    if (workspace && workspace.ownerId === userId) {
+      throw new Error('Cannot remove the workspace owner');
+    }
+    
+    await this.delete(existing.id);
+    return true;
+  }
 
-    const members = await this.db.workspaceUserRole.findMany({
-      select: { id: true, status: true },
-      where: {
-        workspaceId,
-        status: {
-          in: [
-            WorkspaceMemberStatus.NeedMoreSeat,
-            WorkspaceMemberStatus.NeedMoreSeatAndReview,
-          ],
+  /**
+   * Update a user's role in a workspace
+   * @param workspaceId The workspace ID
+   * @param userId The user ID
+   * @param role The new role
+   * @returns The updated workspace-user relation
+   */
+  async updateRole(
+    workspaceId: string,
+    userId: string,
+    role: WorkspaceUserRole,
+  ): Promise<WorkspaceUser> {
+    const existing = await this.findByWorkspaceAndUser(workspaceId, userId);
+    
+    if (!existing) {
+      throw new Error(`User ${userId} is not a member of workspace ${workspaceId}`);
+    }
+    
+    // Check if this is the owner
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+    });
+    
+    if (workspace && workspace.ownerId === userId && role !== WorkspaceUserRole.OWNER) {
+      throw new Error('Cannot change the role of the workspace owner');
+    }
+    
+    return this.update(existing.id, { role });
+  }
+
+  /**
+   * Update a user's workspace settings
+   * @param workspaceId The workspace ID
+   * @param userId The user ID
+   * @param settings The new settings
+   * @returns The updated workspace-user relation
+   */
+  async updateSettings(
+    workspaceId: string,
+    userId: string,
+    settings: any,
+  ): Promise<WorkspaceUser> {
+    const existing = await this.findByWorkspaceAndUser(workspaceId, userId);
+    
+    if (!existing) {
+      throw new Error(`User ${userId} is not a member of workspace ${workspaceId}`);
+    }
+    
+    return this.update(existing.id, {
+      settings: {
+        ...existing.settings,
+        ...settings,
+      },
+    });
+  }
+
+  /**
+   * Update workspace notification settings
+   * @param workspaceId The workspace ID
+   * @param userId The user ID
+   * @param settings The new notification settings
+   * @returns The updated workspace-user relation
+   */
+  async updateNotificationSettings(
+    workspaceId: string,
+    userId: string,
+    settings: Partial<WorkspaceNotificationSettings>,
+  ): Promise<WorkspaceUser> {
+    const existing = await this.findByWorkspaceAndUser(workspaceId, userId);
+    
+    if (!existing) {
+      throw new Error(`User ${userId} is not a member of workspace ${workspaceId}`);
+    }
+    
+    return this.update(existing.id, {
+      settings: {
+        ...existing.settings,
+        notificationSettings: {
+          ...existing.settings.notificationSettings,
+          ...settings,
         },
       },
-      orderBy: { createdAt: 'asc' },
     });
+  }
 
-    const needChange = members.slice(0, availableCount);
-    const { NeedMoreSeat, NeedMoreSeatAndReview } = groupBy(
-      needChange,
-      m => m.status
-    );
-
-    const toPendings = NeedMoreSeat ?? [];
-    if (toPendings.length > 0) {
-      await this.db.workspaceUserRole.updateMany({
-        where: { id: { in: toPendings.map(m => m.id) } },
-        data: { status: WorkspaceMemberStatus.Pending },
+  /**
+   * Create a workspace invitation
+   * @param workspaceId The workspace ID
+   * @param userId The user ID
+   * @param role The user's role
+   * @param invitedBy The user ID who sent the invitation
+   * @returns The created invitation
+   */
+  async createInvitation(
+    workspaceId: string,
+    userId: string,
+    role: WorkspaceUserRole,
+    invitedBy: string,
+  ): Promise<WorkspaceUser> {
+    const existing = await this.findByWorkspaceAndUser(workspaceId, userId);
+    
+    if (existing) {
+      return this.update(existing.id, {
+        role,
+        invitedBy,
+        invitedAt: new Date(),
+        joinedAt: null,
       });
     }
+    
+    return this.create({
+      workspaceId,
+      userId,
+      role,
+      invitedBy,
+      invitedAt: new Date(),
+      joinedAt: null,
+      settings: {
+        showOnHomepage: true,
+        defaultDocumentView: 'DOC',
+        notificationSettings: {
+          documentUpdates: true,
+          comments: true,
+          mentions: true,
+          invites: true,
+        },
+      },
+    });
+  }
 
-    const toUnderReviewUserIds = NeedMoreSeatAndReview ?? [];
-    if (toUnderReviewUserIds.length > 0) {
-      await this.db.workspaceUserRole.updateMany({
-        where: { id: { in: toUnderReviewUserIds.map(m => m.id) } },
-        data: { status: WorkspaceMemberStatus.UnderReview },
-      });
+  /**
+   * Accept a workspace invitation
+   * @param workspaceId The workspace ID
+   * @param userId The user ID
+   * @returns The updated workspace-user relation
+   */
+  async acceptInvitation(workspaceId: string, userId: string): Promise<WorkspaceUser> {
+    const existing = await this.findByWorkspaceAndUser(workspaceId, userId);
+    
+    if (!existing) {
+      throw new Error(`No invitation found for user ${userId} in workspace ${workspaceId}`);
     }
+    
+    if (existing.joinedAt) {
+      throw new Error(`User ${userId} is already a member of workspace ${workspaceId}`);
+    }
+    
+    return this.update(existing.id, {
+      joinedAt: new Date(),
+    });
+  }
+
+  /**
+   * Reject a workspace invitation
+   * @param workspaceId The workspace ID
+   * @param userId The user ID
+   * @returns Whether the invitation was rejected
+   */
+  async rejectInvitation(workspaceId: string, userId: string): Promise<boolean> {
+    const existing = await this.findByWorkspaceAndUser(workspaceId, userId);
+    
+    if (!existing) {
+      return false;
+    }
+    
+    if (existing.joinedAt) {
+      throw new Error(`User ${userId} is already a member of workspace ${workspaceId}`);
+    }
+    
+    await this.delete(existing.id);
+    return true;
   }
 }

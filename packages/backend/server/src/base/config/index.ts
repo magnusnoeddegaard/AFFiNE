@@ -1,29 +1,20 @@
-import { DynamicModule, Global, Module, Provider } from '@nestjs/common';
+import { Module } from '@nestjs/common';
+import { ConfigModule as NestConfigModule } from '@nestjs/config';
+import { ConfigService } from './config.service';
+import { configValidationSchema } from './validation.schema';
 
-import { Config } from './config';
-import { ConfigFactory, OVERRIDE_CONFIG_TOKEN } from './factory';
-import { ConfigProvider } from './provider';
-
-@Global()
 @Module({
-  providers: [ConfigProvider, ConfigFactory],
-  exports: [ConfigProvider, ConfigFactory],
+  imports: [
+    NestConfigModule.forRoot({
+      isGlobal: true,
+      validationSchema: configValidationSchema,
+      validationOptions: {
+        abortEarly: false,
+      },
+      envFilePath: ['.env.local', '.env'],
+    }),
+  ],
+  providers: [ConfigService],
+  exports: [ConfigService],
 })
-export class ConfigModule {
-  static override(overrides: DeepPartial<AppConfigSchema> = {}): DynamicModule {
-    const provider: Provider = {
-      provide: OVERRIDE_CONFIG_TOKEN,
-      useValue: overrides,
-    };
-
-    return {
-      global: true,
-      module: class ConfigOverrideModule {},
-      providers: [provider],
-      exports: [provider],
-    };
-  }
-}
-
-export { Config, ConfigFactory };
-export { defineModuleConfig, type JSONSchema } from './register';
+export class ConfigModule {}

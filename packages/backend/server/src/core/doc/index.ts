@@ -1,42 +1,38 @@
-import './config';
-
 import { Module } from '@nestjs/common';
-
+import { DocumentController } from './controller';
+import { DocumentResolver } from './resolver';
+import { DocumentService } from './service';
+import { DocumentHistoryService } from './history.service';
+import { DocumentHistoryResolver } from './history.resolver';
+import { HistoryModel } from '../../models/history';
+import { DocumentModel } from '../../models/doc';
+import { DocumentSyncModule } from './sync';
+import { DocumentRenderModule } from './render';
+import { DocumentSharingModule } from './sharing';
 import { PermissionModule } from '../permission';
-import { QuotaModule } from '../quota';
-import { StorageModule } from '../storage';
-import { PgUserspaceDocStorageAdapter } from './adapters/userspace';
-import { PgWorkspaceDocStorageAdapter } from './adapters/workspace';
-import { DocEventsListener } from './event';
-import { DocStorageCronJob } from './job';
-import { DocStorageOptions } from './options';
-import { DatabaseDocReader, DocReader, DocReaderProvider } from './reader';
 
 @Module({
-  imports: [QuotaModule, PermissionModule, StorageModule],
-  providers: [
-    DocStorageOptions,
-    PgWorkspaceDocStorageAdapter,
-    PgUserspaceDocStorageAdapter,
-    DocStorageCronJob,
-    DocReaderProvider,
-    DatabaseDocReader,
-    DocEventsListener,
+  imports: [
+    PermissionModule,
+    DocumentSyncModule, 
+    DocumentRenderModule,
+    DocumentSharingModule,
   ],
+  providers: [
+    DocumentService,
+    DocumentResolver,
+    DocumentHistoryService,
+    DocumentHistoryResolver,
+    HistoryModel,
+    DocumentModel,
+  ],
+  controllers: [DocumentController],
   exports: [
-    DatabaseDocReader,
-    DocReader,
-    PgWorkspaceDocStorageAdapter,
-    PgUserspaceDocStorageAdapter,
+    DocumentService, 
+    DocumentHistoryService, 
+    DocumentSyncModule, 
+    DocumentRenderModule,
+    DocumentSharingModule,
   ],
 })
-export class DocStorageModule {}
-export {
-  // only for doc-service
-  DatabaseDocReader,
-  DocReader,
-  PgUserspaceDocStorageAdapter,
-  PgWorkspaceDocStorageAdapter,
-};
-
-export { DocStorageAdapter, type Editor } from './storage';
+export class DocumentModule {}

@@ -1,14 +1,8 @@
-import { Global, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
+import { LoggerService } from './logger.service';
 
-import { ConfigModule } from '../config';
-import { AFFiNELogger } from './service';
-
-@Global()
 @Module({
-  imports: [ConfigModule],
-  providers: [AFFiNELogger],
-  exports: [AFFiNELogger],
+  providers: [LoggerService],
+  exports: [LoggerService],
 })
 export class LoggerModule {}
-
-export { AFFiNELogger } from './service';

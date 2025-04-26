@@ -1,36 +1,64 @@
-import { Controller, Get, Param, Res } from '@nestjs/common';
-import type { Response } from 'express';
+import { Body, Controller, Delete, Get, Post, Put, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { JwtAuthGuard } from '../auth/guard';
+import { UserService } from './service';
+import { UpdateEmailInput, UpdateUserProfileInput, UpdateUserSettingsInput, UserProfile, UserSettings } from './types';
 
-import { ActionForbidden, UserAvatarNotFound } from '../../base';
-import { Public } from '../auth/guard';
-import { AvatarStorage } from '../storage';
+@Controller('users')
+@UseGuards(JwtAuthGuard)
+export class UserController {
+  constructor(private userService: UserService) {}
 
-@Public()
-@Controller('/api/avatars')
-export class UserAvatarController {
-  constructor(private readonly storage: AvatarStorage) {}
+  @Get('profile')
+  async getUserProfile(@Body('userId') userId: string): Promise<UserProfile> {
+    return this.userService.getUserProfile(userId);
+  }
 
-  @Get('/:id')
-  async getAvatar(@Res() res: Response, @Param('id') id: string) {
-    if (this.storage.config.storage.provider !== 'fs') {
-      throw new ActionForbidden(
-        'Only available when avatar storage provider set to fs.'
-      );
-    }
+  @Put('profile')
+  async updateUserProfile(
+    @Body('userId') userId: string,
+    @Body('data') data: UpdateUserProfileInput,
+  ): Promise<UserProfile> {
+    return this.userService.updateUserProfile(userId, data);
+  }
 
-    const { body, metadata } = await this.storage.get(id);
+  @Get('settings')
+  async getUserSettings(@Body('userId') userId: string): Promise<UserSettings> {
+    return this.userService.getUserSettings(userId);
+  }
 
-    if (!body) {
-      throw new UserAvatarNotFound();
-    }
+  @Put('settings')
+  async updateUserSettings(
+    @Body('userId') userId: string,
+    @Body('data') data: UpdateUserSettingsInput,
+  ): Promise<UserSettings> {
+    return this.userService.updateUserSettings(userId, data);
+  }
 
-    // metadata should always exists if body is not null
-    if (metadata) {
-      res.setHeader('content-type', metadata.contentType);
-      res.setHeader('last-modified', metadata.lastModified.toISOString());
-      res.setHeader('content-length', metadata.contentLength);
-    }
+  @Post('avatar')
+  @UseInterceptors(FileInterceptor('avatar'))
+  async uploadAvatar(
+    @Body('userId') userId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ): Promise<{ avatarUrl: string }> {
+    const avatarUrl = await this.userService.uploadAvatar(userId, file.buffer, file.mimetype);
+    return { avatarUrl };
+  }
 
-    body.pipe(res);
+  @Put('email')
+  async updateEmail(
+    @Body('userId') userId: string,
+    @Body() data: UpdateEmailInput,
+  ): Promise<UserProfile> {
+    return this.userService.updateEmail(userId, data.newEmail, data.password);
+  }
+
+  @Delete()
+  async deleteAccount(
+    @Body('userId') userId: string,
+    @Body('password') password: string,
+  ): Promise<{ success: boolean }> {
+    const success = await this.userService.deleteAccount(userId, password);
+    return { success };
   }
 }

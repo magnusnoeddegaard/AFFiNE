@@ -1,19 +1,8 @@
-import './config';
+import { Module } from '@nestjs/common';
+import { RedisService } from './redis.service';
 
-import { Global, Module } from '@nestjs/common';
-
-import {
-  CacheRedis,
-  QueueRedis,
-  SessionRedis,
-  SocketIoRedis,
-} from './instances';
-
-@Global()
 @Module({
-  providers: [CacheRedis, SessionRedis, SocketIoRedis, QueueRedis],
-  exports: [CacheRedis, SessionRedis, SocketIoRedis, QueueRedis],
+  providers: [RedisService],
+  exports: [RedisService],
 })
 export class RedisModule {}
-
-export { CacheRedis, QueueRedis, SessionRedis, SocketIoRedis };

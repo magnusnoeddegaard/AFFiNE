@@ -1,38 +1,39 @@
-export {
-  Cache,
-  CacheInterceptor,
-  MakeCache,
-  PreventCache,
-  SessionCache,
-} from './cache';
-export {
-  Config,
-  ConfigFactory,
-  defineModuleConfig,
-  type JSONSchema,
-} from './config';
-export * from './error';
-export { EventBus, OnEvent } from './event';
-export {
-  paginate,
-  Paginated,
-  PaginationInput,
-  registerObjectType,
-} from './graphql';
-export * from './guard';
-export { CryptoHelper, URLHelper } from './helpers';
-export * from './job';
-export { AFFiNELogger } from './logger';
-export { CallMetric, metrics } from './metrics';
-export { Lock, Locker, Mutex, RequestMutex } from './mutex';
-export * from './nestjs';
-export { type PrismaTransaction } from './prisma';
-export * from './storage';
-export {
-  autoMetadata,
-  type StorageProvider,
-  type StorageProviderConfig,
-  StorageProviderFactory,
-} from './storage';
-export { CloudThrottlerGuard, SkipThrottle, Throttle } from './throttler';
-export * from './utils';
+import { Module } from '@nestjs/common';
+import { ConfigModule } from './config';
+import { PrismaModule } from './prisma';
+import { RedisModule } from './redis';
+import { GraphQLConfigModule } from './graphql';
+import { LoggerModule } from './logger';
+import { MetricsModule } from './metrics';
+import { StorageModule } from './storage';
+import { ErrorModule } from './error';
+import { MutexModule } from './mutex';
+import { SwaggerModule } from './swagger';
+
+@Module({
+  imports: [
+    ConfigModule,
+    PrismaModule,
+    RedisModule,
+    GraphQLConfigModule,
+    LoggerModule,
+    MetricsModule,
+    StorageModule,
+    ErrorModule,
+    MutexModule,
+    SwaggerModule,
+  ],
+  exports: [
+    ConfigModule,
+    PrismaModule,
+    RedisModule,
+    GraphQLConfigModule,
+    LoggerModule,
+    MetricsModule,
+    StorageModule,
+    ErrorModule,
+    MutexModule,
+    SwaggerModule,
+  ],
+})
+export class BaseModule {}

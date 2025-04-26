@@ -1,3 +1,123 @@
-export const DEFAULT_WORKSPACE_AVATAR =
-  'iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAQtSURBVHgBfVa9jhxFEK6q7rkf+4T2AgdIIC0ZoXkBuNQJtngBuIzs1hIRye1FhL438D0CRgKRGUeE6wwkhHYlkE2AtGdkbN/MdJe/qu7Z27PWnnG5Znq7v/rqd47pHddkNh/918tR1/FBamXc9zxOPVFKfJ4yP86qD1LD3/986/3F2zB40+LXv83HrHq/6+gAoNS1kF4odUz2nhJRTkI5E6mD6Bk1crLJkLy5cHc+P4ohzxLng8RKLqKUq6hkUtBSe8Zvdmfir7TT2a0fnkzeaeCbv/44ztSfZskjP2ygVRM0mbYTpgHMMMS8CsIIj/c+//Hp8UYD3z758whQUwdeEwPjAZQLqJhI0VxB2MVco+kXP/0zuZKD6dP5uM397ELzqEtMba/UJ4t7iXeq8U94z52Q+js09qjlIXMxAEsRDJpI59dVPzlDTooHko7BdlR2FcYmAtbGMmAt2mFI4yDQkIjtEQkxUAMKAPD9SiOK4b578N0S7Nt+fqFKbTbmRD1YGXurEmdtnjjz4kFuIV0gtWewV62hMHBY2gpEOw3Rnmztx9jnO72xzTV/YkzgNmgkiypeYJdCLjonqyAAg7VCshVpjTbD08HbxrySdhKxcDvoJTA5gLvpeXVQ+K340WKea9UkNeZVqGSba/IbF6athj+LUeRmRCyiAVnlAKhJJQfmugGZ28ZWna24RGzwNUNUqpWGf6HkajvAgNA4NsSjHgcb9obx+k5c3DUttcwd3NcHxpVurXQ2d4MZACGw9TwEHsdtbEwytL1xywAGcxavjoH1quLVywuGi+aBhFWexRilFSwK0QzgdUdkkVMeKw4wijrgxjzz2CefCRZn+21ViOWW4Ym9nNnyFLMbMS8ivNhGP8RdlgUojBkuBLDpEPi+5LpWiDURgFkKOIIckJTgN/sZ84KtKkKpDnsOZiTQ47jD4ZGwHghbw6AXIL3lo5Zg6Tp2AwIAyYJ8BRzGfmfPl6kI7HOLUdN2LIg+4IfL5SiFdvkK4blI6h50qda7jQI0CUMLdEhFIkqtQciMvXsgpaZ1pWtVUfrIa+TX5/8+RBcftAhTa91r8ycXA5ZxBqhAh2zgVagUAddxMkxfF/JxfvbpB+8d2jhBtsPhtuqsE0HJlhxYeHKdkCU8xUCos8dmkDdnGaOlJ1yy9dM52J2spqldvz9fTgB4z+aQd2kqjUY2KU2s4dTT7ezD0AqDAbvZiKF/VO9+fGPv9IoBu+b/P5ti6djDY+JlSg4ug1jc6fJbMAx9/3b4CNGTD/evT698D9avv188m4gKvko8MiMeJC3jmOvU9MSuHXZohAVpOrmxd+10HW/jR3/58uU45TRFt35ZR2XpY61DzW+tH3z/7xdM8sP93d3Fm1gbDawbEtU7CMtt/JVxEw01Kh7RAmoBE4+u7eycYv38bRivAZbdHBtPrwOHAAAAAElFTkSuQmCC';
-export const DEFAULT_WORKSPACE_NAME = 'Untitled Workspace';
+import { SoftDelete, Timestamps } from './index';
+
+/**
+ * Workspace visibility options
+ */
+export enum WorkspaceVisibility {
+  PRIVATE = 'PRIVATE',
+  RESTRICTED = 'RESTRICTED',
+  PUBLIC = 'PUBLIC',
+}
+
+/**
+ * Workspace base interface
+ */
+export interface WorkspaceBase extends Timestamps, SoftDelete {
+  id: string;
+  name: string;
+  description: string | null;
+  avatarUrl: string | null;
+  visibility: WorkspaceVisibility;
+  ownerId: string;
+  settings: WorkspaceSettings;
+}
+
+/**
+ * Workspace settings
+ */
+export interface WorkspaceSettings {
+  defaultDocumentVisibility: string;
+  documentNameTemplate: string;
+  customTheme: Record<string, any> | null;
+  features: WorkspaceFeatures;
+}
+
+/**
+ * Workspace enabled features
+ */
+export interface WorkspaceFeatures {
+  ai: boolean;
+  history: boolean;
+  realTimeCollaboration: boolean;
+  publicSharing: boolean;
+}
+
+/**
+ * Workspace user role
+ */
+export enum WorkspaceUserRole {
+  OWNER = 'OWNER',
+  ADMIN = 'ADMIN',
+  MEMBER = 'MEMBER',
+  VIEWER = 'VIEWER',
+}
+
+/**
+ * Workspace user relation
+ */
+export interface WorkspaceUser extends Timestamps {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  role: WorkspaceUserRole;
+  invitedBy: string | null;
+  invitedAt: Date | null;
+  joinedAt: Date | null;
+  settings: WorkspaceUserSettings;
+}
+
+/**
+ * User-specific settings for a workspace
+ */
+export interface WorkspaceUserSettings {
+  showOnHomepage: boolean;
+  defaultDocumentView: string;
+  notificationSettings: WorkspaceNotificationSettings;
+}
+
+/**
+ * Workspace notification settings
+ */
+export interface WorkspaceNotificationSettings {
+  documentUpdates: boolean;
+  comments: boolean;
+  mentions: boolean;
+  invites: boolean;
+}
+
+/**
+ * Team in a workspace
+ */
+export interface Team extends Timestamps {
+  id: string;
+  name: string;
+  description: string | null;
+  avatarUrl: string | null;
+  workspaceId: string;
+  leaderId: string | null;
+  settings: TeamSettings;
+}
+
+/**
+ * Team settings
+ */
+export interface TeamSettings {
+  color: string | null;
+  defaultRole: WorkspaceUserRole;
+  features: {
+    privateDocuments: boolean;
+    privateChat: boolean;
+  };
+}
+
+/**
+ * Team member relation
+ */
+export interface TeamMember extends Timestamps {
+  id: string;
+  teamId: string;
+  userId: string;
+  role: WorkspaceUserRole;
+  addedBy: string;
+  addedAt: Date;
+}

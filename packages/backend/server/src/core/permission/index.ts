@@ -1,27 +1,9 @@
 import { Module } from '@nestjs/common';
-
-import { AccessControllerBuilder } from './builder';
-import { DocAccessController } from './doc';
-import { EventsListener } from './event';
-import { WorkspaceAccessController } from './workspace';
+import { PermissionService } from './service';
+import { PermissionResolver } from './resolver';
 
 @Module({
-  providers: [
-    WorkspaceAccessController,
-    DocAccessController,
-    AccessControllerBuilder,
-    EventsListener,
-  ],
-  exports: [AccessControllerBuilder],
+  providers: [PermissionService, PermissionResolver],
+  exports: [PermissionService],
 })
 export class PermissionModule {}
-
-export { AccessControllerBuilder as AccessController } from './builder';
-export {
-  DOC_ACTIONS,
-  type DocAction,
-  DocRole,
-  WORKSPACE_ACTIONS,
-  type WorkspaceAction,
-  WorkspaceRole,
-} from './types';

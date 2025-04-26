@@ -1,171 +1,191 @@
 import { Injectable } from '@nestjs/common';
-
+import { PrismaService } from '../base/prisma';
 import { BaseModel } from './base';
-import { Doc, DocEditor, publicUserSelect } from './common';
+import { DocumentContent, DocumentHistory } from './common';
 
-export interface DocHistorySimple {
-  timestamp: number;
-  editor: DocEditor | null;
-}
-
-export interface DocHistory {
-  blob: Uint8Array;
-  timestamp: number;
-  editor: DocEditor | null;
-}
-
-export interface DocHistoryFilter {
-  /**
-   * timestamp to filter histories before.
-   */
-  before?: number;
-  /**
-   * limit the number of histories to return.
-   *
-   * Default to `100`.
-   */
-  take?: number;
-}
-
+/**
+ * History model for document history operations
+ */
 @Injectable()
-export class HistoryModel extends BaseModel {
+export class HistoryModel extends BaseModel<DocumentHistory> {
+  constructor(protected readonly prisma: PrismaService) {
+    super(prisma);
+  }
+
   /**
-   * Create a doc history with a max age.
+   * Get the Prisma model delegate
    */
-  async create(snapshot: Doc, maxAge: number): Promise<DocHistorySimple> {
-    const row = await this.db.snapshotHistory.create({
-      select: {
-        timestamp: true,
-        createdByUser: { select: publicUserSelect },
+  protected get model() {
+    return this.prisma.documentHistory;
+  }
+
+  /**
+   * Find history entries by document ID
+   * @param documentId The document ID
+   * @param options Query options
+   * @returns The history entries
+   */
+  async findByDocument(documentId: string, options: any = {}): Promise<DocumentHistory[]> {
+    return this.findMany(
+      { documentId },
+      {
+        orderBy: { version: 'desc' },
+        ...options,
       },
-      data: {
-        workspaceId: snapshot.spaceId,
-        id: snapshot.docId,
-        timestamp: new Date(snapshot.timestamp),
-        blob: snapshot.blob,
-        createdBy: snapshot.editorId,
-        expiredAt: new Date(Date.now() + maxAge),
-      },
-    });
-    this.logger.debug(
-      `Created history ${row.timestamp} for ${snapshot.docId} in ${snapshot.spaceId}`
     );
-    return {
-      timestamp: row.timestamp.getTime(),
-      editor: row.createdByUser,
-    };
   }
 
   /**
-   * Find doc history by workspaceId and docId.
-   *
-   * Only including timestamp, createdByUser
+   * Get a specific version of a document
+   * @param documentId The document ID
+   * @param version The version number
+   * @returns The history entry with content
    */
-  async findMany(
-    workspaceId: string,
-    docId: string,
-    filter?: DocHistoryFilter
-  ): Promise<DocHistorySimple[]> {
-    const rows = await this.db.snapshotHistory.findMany({
-      select: {
-        timestamp: true,
-        createdByUser: { select: publicUserSelect },
-      },
+  async getVersion(
+    documentId: string,
+    version: number,
+  ): Promise<{ history: DocumentHistory; content: DocumentContent } | null> {
+    const history = await this.model.findFirst({
       where: {
-        workspaceId,
-        id: docId,
-        timestamp: {
-          lt: filter?.before ? new Date(filter.before) : new Date(),
-        },
-      },
-      orderBy: {
-        timestamp: 'desc',
-      },
-      take: filter?.take ?? 100,
-    });
-    return rows.map(r => ({
-      timestamp: r.timestamp.getTime(),
-      editor: r.createdByUser,
-    }));
-  }
-
-  /**
-   * Get the history of a doc at a specific timestamp.
-   *
-   * Including blob and createdByUser
-   */
-  async get(
-    workspaceId: string,
-    docId: string,
-    timestamp: number
-  ): Promise<DocHistory | null> {
-    const row = await this.db.snapshotHistory.findUnique({
-      where: {
-        workspaceId_id_timestamp: {
-          workspaceId,
-          id: docId,
-          timestamp: new Date(timestamp),
-        },
-      },
-      include: {
-        createdByUser: { select: publicUserSelect },
+        documentId,
+        version,
       },
     });
-    if (!row) {
+    
+    if (!history) {
       return null;
     }
-    return {
-      blob: row.blob,
-      timestamp: row.timestamp.getTime(),
-      editor: row.createdByUser,
-    };
-  }
-
-  /**
-   * Get the latest history of a doc.
-   *
-   * Only including timestamp, createdByUser
-   */
-  async getLatest(
-    workspaceId: string,
-    docId: string
-  ): Promise<DocHistorySimple | null> {
-    const row = await this.db.snapshotHistory.findFirst({
-      where: {
-        workspaceId,
-        id: docId,
-      },
-      select: {
-        timestamp: true,
-        createdByUser: { select: publicUserSelect },
-      },
-      orderBy: {
-        timestamp: 'desc',
-      },
+    
+    const content = await this.prisma.documentContent.findUnique({
+      where: { id: history.contentId },
     });
-    if (!row) {
+    
+    if (!content) {
       return null;
     }
-    return {
-      timestamp: row.timestamp.getTime(),
-      editor: row.createdByUser,
-    };
+    
+    return { history, content };
   }
 
   /**
-   * Clean expired histories.
+   * Create a new history entry
+   * @param documentId The document ID
+   * @param contentId The content ID
+   * @param version The version number
+   * @param createdById The user ID who created the version
+   * @param message Optional message describing the changes
+   * @returns The created history entry
    */
-  async cleanExpired() {
-    const { count } = await this.db.snapshotHistory.deleteMany({
-      where: {
-        expiredAt: {
-          lte: new Date(),
-        },
-      },
+  async createHistoryEntry(
+    documentId: string,
+    contentId: string,
+    version: number,
+    createdById: string,
+    message?: string,
+  ): Promise<DocumentHistory> {
+    return this.create({
+      documentId,
+      contentId,
+      version,
+      createdById,
+      message,
     });
-    if (count > 0) {
-      this.logger.log(`Deleted ${count} expired histories`);
-    }
-    return count;
+  }
+
+  /**
+   * Restore a document to a specific version
+   * @param documentId The document ID
+   * @param version The version to restore
+   * @param userId The user ID performing the restore
+   * @param message Optional restore message
+   * @returns The new content created by the restore
+   */
+  async restoreVersion(
+    documentId: string,
+    version: number,
+    userId: string,
+    message?: string,
+  ): Promise<DocumentContent | null> {
+    return this.prisma.$transaction(async (tx) => {
+      // Get the version to restore
+      const versionData = await this.getVersion(documentId, version);
+      
+      if (!versionData) {
+        return null;
+      }
+      
+      // Get the latest version
+      const latestContent = await tx.documentContent.findFirst({
+        where: { documentId },
+        orderBy: { version: 'desc' },
+      });
+      
+      const newVersion = latestContent ? latestContent.version + 1 : 1;
+      
+      // Create new content based on the old version
+      const newContent = await tx.documentContent.create({
+        data: {
+          documentId,
+          version: newVersion,
+          content: versionData.content.content,
+          blobIds: versionData.content.blobIds,
+        },
+      });
+      
+      // Create history entry for the restore
+      await tx.documentHistory.create({
+        data: {
+          documentId,
+          contentId: newContent.id,
+          version: newVersion,
+          createdById: userId,
+          message: message || `Restored from version ${version}`,
+        },
+      });
+      
+      // Update document's updatedAt
+      await tx.document.update({
+        where: { id: documentId },
+        data: { updatedAt: new Date() },
+      });
+      
+      return newContent;
+    });
+  }
+
+  /**
+   * Delete history entries for a document
+   * @param documentId The document ID
+   * @returns The count of deleted entries
+   */
+  async deleteDocumentHistory(documentId: string): Promise<number> {
+    const result = await this.prisma.documentHistory.deleteMany({
+      where: { documentId },
+    });
+    
+    return result.count;
+  }
+
+  /**
+   * Compare two versions of a document
+   * @param documentId The document ID
+   * @param versionA First version to compare
+   * @param versionB Second version to compare
+   * @returns The content of both versions
+   */
+  async compareVersions(
+    documentId: string,
+    versionA: number,
+    versionB: number,
+  ): Promise<{ versionA: DocumentContent | null; versionB: DocumentContent | null }> {
+    const [resultA, resultB] = await Promise.all([
+      this.getVersion(documentId, versionA),
+      this.getVersion(documentId, versionB),
+    ]);
+    
+    return {
+      versionA: resultA ? resultA.content : null,
+      versionB: resultB ? resultB.content : null,
+    };
   }
 }

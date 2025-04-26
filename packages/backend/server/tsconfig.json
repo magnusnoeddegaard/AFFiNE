@@ -1,20 +1,30 @@
 {
-  "extends": "../../../tsconfig.node.json",
   "compilerOptions": {
-    "jsx": "react-jsx",
+    "module": "commonjs",
+    "declaration": true,
+    "removeComments": true,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "allowSyntheticDefaultImports": true,
-    "verbatimModuleSyntax": false,
-    "rootDir": "./src",
+    "target": "ES2021",
+    "sourceMap": true,
     "outDir": "./dist",
-    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo"
+    "baseUrl": "./",
+    "incremental": true,
+    "skipLibCheck": true,
+    "strictNullChecks": true,
+    "noImplicitAny": true,
+    "strictBindCallApply": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "paths": {
+      "@app/*": ["src/*"],
+      "@base/*": ["src/base/*"],
+      "@core/*": ["src/core/*"],
+      "@plugins/*": ["src/plugins/*"],
+      "@models/*": ["src/models/*"]
+    }
   },
-  "include": ["./src"],
-  "references": [
-    { "path": "../native" },
-    { "path": "../../../tools/cli" },
-    { "path": "../../../tools/utils" },
-    { "path": "../../common/graphql" }
-  ]
+  "include": ["src/**/*", "test/**/*"],
+  "references": []
 }

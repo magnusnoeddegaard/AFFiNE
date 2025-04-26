@@ -1,144 +1,57 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ModuleRef } from '@nestjs/core';
-import {
-  CompositePropagator,
-  W3CBaggagePropagator,
-  W3CTraceContextPropagator,
-} from '@opentelemetry/core';
+import { NodeSDK } from '@opentelemetry/sdk-node';
 import { PrometheusExporter } from '@opentelemetry/exporter-prometheus';
-import { ZipkinExporter } from '@opentelemetry/exporter-zipkin';
-import { Instrumentation } from '@opentelemetry/instrumentation';
-import { GraphQLInstrumentation } from '@opentelemetry/instrumentation-graphql';
-import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
-import { IORedisInstrumentation } from '@opentelemetry/instrumentation-ioredis';
-import { NestInstrumentation } from '@opentelemetry/instrumentation-nestjs-core';
-import { SocketIoInstrumentation } from '@opentelemetry/instrumentation-socket.io';
+import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import { Resource } from '@opentelemetry/resources';
-import { MetricProducer, MetricReader } from '@opentelemetry/sdk-metrics';
-import { NodeSDK, NodeSDKConfiguration } from '@opentelemetry/sdk-node';
-import {
-  BatchSpanProcessor,
-  SpanExporter,
-  TraceIdRatioBasedSampler,
-} from '@opentelemetry/sdk-trace-node';
-import {
-  ATTR_K8S_NAMESPACE_NAME,
-  ATTR_SERVICE_NAME,
-  ATTR_SERVICE_VERSION,
-} from '@opentelemetry/semantic-conventions/incubating';
-import prismaInstrument from '@prisma/instrumentation';
+import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
 
-import { Config } from '../config';
-import { OnEvent } from '../event/def';
-import { registerCustomMetrics } from './metrics';
-import { PrismaMetricProducer } from './prisma';
-
-const { PrismaInstrumentation } = prismaInstrument;
-
-export abstract class BaseOpentelemetryOptionsFactory {
-  abstract getMetricReader(): MetricReader;
-  abstract getSpanExporter(): SpanExporter;
-
-  getInstractions(): Instrumentation[] {
-    return [
-      new NestInstrumentation(),
-      new IORedisInstrumentation(),
-      new SocketIoInstrumentation({ traceReserved: true }),
-      new GraphQLInstrumentation({ mergeItems: true }),
-      new HttpInstrumentation(),
-      new PrismaInstrumentation(),
-    ];
+/**
+ * Setup OpenTelemetry for the application
+ */
+export async function setupOpenTelemetry() {
+  // Skip if not in production or explicitly enabled
+  if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_TELEMETRY !== 'true') {
+    console.log('OpenTelemetry is disabled in development. Set ENABLE_TELEMETRY=true to enable.');
+    return;
   }
 
-  getMetricsProducers(): MetricProducer[] {
-    return [new PrismaMetricProducer()];
-  }
+  const prometheusExporter = new PrometheusExporter({
+    port: parseInt(process.env.METRICS_PORT || '9464', 10),
+  });
 
-  getResource() {
-    return new Resource({
-      [ATTR_K8S_NAMESPACE_NAME]: env.NAMESPACE,
-      [ATTR_SERVICE_NAME]: env.FLAVOR,
-      [ATTR_SERVICE_VERSION]: env.version,
-    });
-  }
-
-  create(): Partial<NodeSDKConfiguration> {
-    const traceExporter = this.getSpanExporter();
-    return {
-      resource: this.getResource(),
-      sampler: new TraceIdRatioBasedSampler(0.1),
-      traceExporter,
-      metricReader: this.getMetricReader(),
-      spanProcessor: new BatchSpanProcessor(traceExporter),
-      textMapPropagator: new CompositePropagator({
-        propagators: [
-          new W3CBaggagePropagator(),
-          new W3CTraceContextPropagator(),
-        ],
+  const sdk = new NodeSDK({
+    resource: new Resource({
+      [SemanticResourceAttributes.SERVICE_NAME]: 'affine-server',
+      [SemanticResourceAttributes.SERVICE_VERSION]: process.env.npm_package_version || '0.0.0',
+      [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: process.env.NODE_ENV || 'development',
+    }),
+    metricReader: prometheusExporter,
+    contextManager: new AsyncLocalStorageContextManager(),
+    instrumentations: [
+      getNodeAutoInstrumentations({
+        '@opentelemetry/instrumentation-fs': { enabled: false },
+        '@opentelemetry/instrumentation-express': { enabled: true },
+        '@opentelemetry/instrumentation-graphql': { enabled: true },
+        '@opentelemetry/instrumentation-http': { enabled: true },
+        '@opentelemetry/instrumentation-ioredis': { enabled: true },
       }),
-      instrumentations: this.getInstractions(),
-      serviceName: 'affine-cloud',
-    };
-  }
-}
+    ],
+  });
 
-@Injectable()
-export class OpentelemetryOptionsFactory extends BaseOpentelemetryOptionsFactory {
-  override getMetricReader(): MetricReader {
-    return new PrometheusExporter({
-      metricProducers: this.getMetricsProducers(),
-    });
-  }
+  // Initialize the SDK
+  await sdk.start();
 
-  override getSpanExporter(): SpanExporter {
-    return new ZipkinExporter();
-  }
-}
+  // Handle shutdown gracefully
+  const shutdownHandler = async () => {
+    await sdk.shutdown()
+      .then(() => console.log('OpenTelemetry SDK shut down successfully'))
+      .catch((error) => console.error('Error shutting down OpenTelemetry SDK', error));
+    process.exit(0);
+  };
 
-@Injectable()
-export class OpentelemetryProvider {
-  readonly #logger = new Logger(OpentelemetryProvider.name);
-  #sdk: NodeSDK | null = null;
+  process.on('SIGTERM', shutdownHandler);
+  process.on('SIGINT', shutdownHandler);
 
-  constructor(
-    private readonly config: Config,
-    private readonly ref: ModuleRef
-  ) {}
-
-  @OnEvent('config.init')
-  async init(event: Events['config.init']) {
-    if (event.config.metrics.enabled) {
-      await this.setup();
-      registerCustomMetrics();
-    }
-  }
-
-  @OnEvent('config.changed')
-  async onConfigChanged(event: Events['config.changed']) {
-    if ('metrics' in event.updates) {
-      await this.setup();
-    }
-  }
-
-  async onModuleDestroy() {
-    await this.#sdk?.shutdown();
-  }
-
-  private async setup() {
-    if (this.config.metrics.enabled) {
-      if (!this.#sdk) {
-        const factory = this.ref.get(OpentelemetryOptionsFactory, {
-          strict: false,
-        });
-        this.#sdk = new NodeSDK(factory.create());
-      }
-
-      this.#sdk.start();
-      this.#logger.log('OpenTelemetry SDK started');
-    } else {
-      await this.#sdk?.shutdown();
-      this.#sdk = null;
-      this.#logger.log('OpenTelemetry SDK stopped');
-    }
-  }
+  console.log('OpenTelemetry initialized successfully');
+  console.log(`Prometheus metrics available at http://localhost:${prometheusExporter.port}/metrics`);
 }

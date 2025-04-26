@@ -1,211 +1,154 @@
-import assert from 'node:assert';
-
 import { Injectable } from '@nestjs/common';
-import { Transactional } from '@nestjs-cls/transactional';
-import { WorkspaceDocUserRole } from '@prisma/client';
-
-import { CanNotBatchGrantDocOwnerPermissions, PaginationInput } from '../base';
+import { PrismaService } from '../base/prisma';
 import { BaseModel } from './base';
-import { DocRole } from './common';
+import { DocumentPermission, DocumentUser } from './common';
 
+/**
+ * DocumentUser model for document-user relation operations
+ */
 @Injectable()
-export class DocUserModel extends BaseModel {
-  /**
-   * Set or update the [Owner] of a doc.
-   * The old [Owner] will be changed to [Manager] if there is already an [Owner].
-   */
-  @Transactional()
-  async setOwner(workspaceId: string, docId: string, userId: string) {
-    const oldOwner = await this.db.workspaceDocUserRole.findFirst({
-      where: {
-        workspaceId,
-        docId,
-        type: DocRole.Owner,
-      },
-    });
-
-    if (oldOwner) {
-      await this.db.workspaceDocUserRole.update({
-        where: {
-          workspaceId_docId_userId: {
-            workspaceId,
-            docId,
-            userId: oldOwner.userId,
-          },
-        },
-        data: {
-          type: DocRole.Manager,
-        },
-      });
-    }
-
-    await this.db.workspaceDocUserRole.upsert({
-      where: {
-        workspaceId_docId_userId: {
-          workspaceId,
-          docId,
-          userId,
-        },
-      },
-      update: {
-        type: DocRole.Owner,
-      },
-      create: {
-        workspaceId,
-        docId,
-        userId,
-        type: DocRole.Owner,
-      },
-    });
-
-    if (oldOwner) {
-      this.logger.log(
-        `Transfer doc owner of [${workspaceId}/${docId}] from [${oldOwner.userId}] to [${userId}]`
-      );
-    } else {
-      this.logger.log(
-        `Set doc owner of [${workspaceId}/${docId}] to [${userId}]`
-      );
-    }
+export class DocumentUserModel extends BaseModel<DocumentUser> {
+  constructor(protected readonly prisma: PrismaService) {
+    super(prisma);
   }
 
   /**
-   * Set or update the Role of a user in a doc.
-   *
-   * NOTE: do not use this method to set the [Owner] of a doc. Use {@link setOwner} instead.
+   * Get the Prisma model delegate
    */
-  @Transactional()
-  async set(workspaceId: string, docId: string, userId: string, role: DocRole) {
-    // internal misuse, throw directly
-    assert(role !== DocRole.Owner, 'Cannot set Owner role of a doc to a user.');
-
-    const oldRole = await this.get(workspaceId, docId, userId);
-
-    if (oldRole && oldRole.type === role) {
-      return oldRole;
-    }
-
-    const newRole = await this.db.workspaceDocUserRole.upsert({
-      where: {
-        workspaceId_docId_userId: {
-          workspaceId,
-          docId,
-          userId,
-        },
-      },
-      update: {
-        type: role,
-      },
-      create: {
-        workspaceId,
-        docId,
-        userId,
-        type: role,
-      },
-    });
-
-    return newRole;
+  protected get model() {
+    return this.prisma.documentUser;
   }
 
-  async batchSetUserRoles(
-    workspaceId: string,
-    docId: string,
-    userIds: string[],
-    role: DocRole
-  ) {
-    if (userIds.length === 0) {
+  /**
+   * Find document access by document ID and user ID
+   * @param documentId The document ID
+   * @param userId The user ID
+   * @returns The document-user relation
+   */
+  async findByDocumentAndUser(documentId: string, userId: string): Promise<DocumentUser | null> {
+    return this.model.findFirst({
+      where: {
+        documentId,
+        userId,
+      },
+    });
+  }
+
+  /**
+   * Get all users with access to a document
+   * @param documentId The document ID
+   * @returns The document-user relations
+   */
+  async findByDocument(documentId: string): Promise<DocumentUser[]> {
+    return this.findMany({ documentId });
+  }
+
+  /**
+   * Get all document access for a user
+   * @param userId The user ID
+   * @returns The document-user relations
+   */
+  async findByUser(userId: string): Promise<DocumentUser[]> {
+    return this.findMany({ userId });
+  }
+
+  /**
+   * Grant permission to a user for a document
+   * @param documentId The document ID
+   * @param userId The user ID
+   * @param permission The permission level
+   * @returns The created or updated document-user relation
+   */
+  async grantPermission(
+    documentId: string,
+    userId: string,
+    permission: DocumentPermission,
+  ): Promise<DocumentUser> {
+    const existing = await this.findByDocumentAndUser(documentId, userId);
+    
+    if (existing) {
+      return this.update(existing.id, { permission });
+    }
+    
+    return this.create({
+      documentId,
+      userId,
+      permission,
+    });
+  }
+
+  /**
+   * Revoke permission from a user for a document
+   * @param documentId The document ID
+   * @param userId The user ID
+   * @returns Whether the permission was revoked
+   */
+  async revokePermission(documentId: string, userId: string): Promise<boolean> {
+    const existing = await this.findByDocumentAndUser(documentId, userId);
+    
+    if (existing) {
+      await this.delete(existing.id);
+      return true;
+    }
+    
+    return false;
+  }
+
+  /**
+   * Check if a user has a specific permission level for a document
+   * @param documentId The document ID
+   * @param userId The user ID
+   * @param requiredPermission The required permission level
+   * @returns Whether the user has the required permission
+   */
+  async hasPermission(
+    documentId: string,
+    userId: string,
+    requiredPermission: DocumentPermission,
+  ): Promise<boolean> {
+    const access = await this.findByDocumentAndUser(documentId, userId);
+    
+    if (!access) {
+      return false;
+    }
+    
+    const permissionLevels = {
+      [DocumentPermission.NONE]: 0,
+      [DocumentPermission.READ]: 1,
+      [DocumentPermission.COMMENT]: 2,
+      [DocumentPermission.WRITE]: 3,
+      [DocumentPermission.ADMIN]: 4,
+      [DocumentPermission.OWNER]: 5,
+    };
+    
+    return permissionLevels[access.permission] >= permissionLevels[requiredPermission];
+  }
+
+  /**
+   * Copy permissions from one document to another
+   * @param sourceDocumentId The source document ID
+   * @param targetDocumentId The target document ID
+   * @returns The count of copied permissions
+   */
+  async copyPermissions(sourceDocumentId: string, targetDocumentId: string): Promise<number> {
+    const sourcePermissions = await this.findByDocument(sourceDocumentId);
+    
+    if (!sourcePermissions.length) {
       return 0;
     }
-
-    if (role === DocRole.Owner) {
-      throw new CanNotBatchGrantDocOwnerPermissions();
-    }
-
-    const result = await this.db.workspaceDocUserRole.createMany({
-      skipDuplicates: true,
-      data: userIds.map(userId => ({
-        workspaceId,
-        docId,
-        userId,
-        type: role,
-      })),
-    });
-
-    return result.count;
-  }
-
-  async delete(workspaceId: string, docId: string, userId: string) {
-    await this.db.workspaceDocUserRole.deleteMany({
-      where: {
-        workspaceId,
-        docId,
-        userId,
-      },
-    });
-  }
-
-  async deleteByUserId(userId: string) {
-    await this.db.workspaceDocUserRole.deleteMany({
-      where: {
-        userId,
-      },
-    });
-  }
-
-  async getOwner(workspaceId: string, docId: string) {
-    return await this.db.workspaceDocUserRole.findFirst({
-      where: {
-        workspaceId,
-        docId,
-        type: DocRole.Owner,
-      },
-    });
-  }
-
-  async get(workspaceId: string, docId: string, userId: string) {
-    return await this.db.workspaceDocUserRole.findUnique({
-      where: {
-        workspaceId_docId_userId: {
-          workspaceId,
-          docId,
-          userId,
-        },
-      },
-    });
-  }
-
-  count(workspaceId: string, docId: string) {
-    return this.db.workspaceDocUserRole.count({
-      where: {
-        workspaceId,
-        docId,
-      },
-    });
-  }
-
-  async paginate(
-    workspaceId: string,
-    docId: string,
-    pagination: PaginationInput
-  ): Promise<[WorkspaceDocUserRole[], number]> {
-    return await Promise.all([
-      this.db.workspaceDocUserRole.findMany({
-        where: {
-          workspaceId,
-          docId,
-          createdAt: pagination.after
-            ? {
-                gte: pagination.after,
-              }
-            : undefined,
-        },
-        orderBy: {
-          createdAt: 'asc',
-        },
-        take: pagination.first,
-        skip: pagination.offset + (pagination.after ? 1 : 0),
-      }),
-      this.count(workspaceId, docId),
-    ]);
+    
+    await this.prisma.$transaction(
+      sourcePermissions.map((perm) =>
+        this.prisma.documentUser.create({
+          data: {
+            documentId: targetDocumentId,
+            userId: perm.userId,
+            permission: perm.permission,
+          },
+        }),
+      ),
+    );
+    
+    return sourcePermissions.length;
   }
 }

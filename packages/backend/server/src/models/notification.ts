@@ -1,249 +1,197 @@
 import { Injectable } from '@nestjs/common';
-import {
-  Notification,
-  NotificationLevel,
-  NotificationType,
-  Prisma,
-} from '@prisma/client';
-import { z } from 'zod';
-
-import { PaginationInput } from '../base';
+import { PrismaService } from '../base/prisma';
 import { BaseModel } from './base';
-import { DocMode } from './common';
+import { Timestamps } from './common';
 
-export { NotificationLevel, NotificationType };
-export type { Notification };
+/**
+ * Notification types
+ */
+export enum NotificationType {
+  DOCUMENT_UPDATED = 'DOCUMENT_UPDATED',
+  DOCUMENT_SHARED = 'DOCUMENT_SHARED',
+  COMMENT_ADDED = 'COMMENT_ADDED',
+  COMMENT_REPLIED = 'COMMENT_REPLIED',
+  WORKSPACE_INVITATION = 'WORKSPACE_INVITATION',
+  WORKSPACE_ROLE_CHANGED = 'WORKSPACE_ROLE_CHANGED',
+  MENTION = 'MENTION',
+  SYSTEM = 'SYSTEM',
+}
 
-// #region input
+/**
+ * Notification model interface
+ */
+export interface Notification extends Timestamps {
+  id: string;
+  userId: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  data: Record<string, any>;
+  read: boolean;
+  readAt: Date | null;
+  dismissed: boolean;
+  email: boolean;
+  emailSent: boolean;
+  emailSentAt: Date | null;
+}
 
-export const ONE_YEAR = 1000 * 60 * 60 * 24 * 365;
-const IdSchema = z.string().trim().min(1).max(100);
-
-export const BaseNotificationCreateSchema = z.object({
-  userId: IdSchema,
-  level: z
-    .nativeEnum(NotificationLevel)
-    .optional()
-    .default(NotificationLevel.Default),
-});
-
-export const MentionDocSchema = z.object({
-  id: IdSchema,
-  // Allow empty string, will display as `Untitled` at frontend
-  title: z.string().trim().max(255),
-  mode: z.nativeEnum(DocMode),
-  // blockId or elementId is required at least one
-  blockId: IdSchema.optional(),
-  elementId: IdSchema.optional(),
-});
-
-export type MentionDoc = z.infer<typeof MentionDocSchema>;
-export type MentionDocCreate = z.input<typeof MentionDocSchema>;
-
-const MentionNotificationBodySchema = z.object({
-  workspaceId: IdSchema,
-  createdByUserId: IdSchema,
-  doc: MentionDocSchema,
-});
-
-export type MentionNotificationBody = z.infer<
-  typeof MentionNotificationBodySchema
->;
-
-export const MentionNotificationCreateSchema =
-  BaseNotificationCreateSchema.extend({
-    body: MentionNotificationBodySchema,
-  });
-
-export type MentionNotificationCreate = z.input<
-  typeof MentionNotificationCreateSchema
->;
-
-const InvitationNotificationBodySchema = z.object({
-  workspaceId: IdSchema,
-  createdByUserId: IdSchema,
-  inviteId: IdSchema,
-});
-
-export type InvitationNotificationBody = z.infer<
-  typeof InvitationNotificationBodySchema
->;
-
-export const InvitationNotificationCreateSchema =
-  BaseNotificationCreateSchema.extend({
-    body: InvitationNotificationBodySchema,
-  });
-
-export type InvitationNotificationCreate = z.input<
-  typeof InvitationNotificationCreateSchema
->;
-
-const InvitationReviewDeclinedNotificationBodySchema = z.object({
-  workspaceId: IdSchema,
-  createdByUserId: IdSchema,
-});
-
-export type InvitationReviewDeclinedNotificationBody = z.infer<
-  typeof InvitationReviewDeclinedNotificationBodySchema
->;
-
-export const InvitationReviewDeclinedNotificationCreateSchema =
-  BaseNotificationCreateSchema.extend({
-    body: InvitationReviewDeclinedNotificationBodySchema,
-  });
-
-export type InvitationReviewDeclinedNotificationCreate = z.input<
-  typeof InvitationReviewDeclinedNotificationCreateSchema
->;
-
-export type UnionNotificationBody =
-  | MentionNotificationBody
-  | InvitationNotificationBody
-  | InvitationReviewDeclinedNotificationBody;
-
-// #endregion
-
-// #region output
-
-export type MentionNotification = Notification &
-  z.infer<typeof MentionNotificationCreateSchema>;
-
-export type InvitationNotification = Notification &
-  z.infer<typeof InvitationNotificationCreateSchema>;
-
-export type InvitationReviewDeclinedNotification = Notification &
-  z.infer<typeof InvitationReviewDeclinedNotificationCreateSchema>;
-
-export type UnionNotification =
-  | MentionNotification
-  | InvitationNotification
-  | InvitationReviewDeclinedNotification;
-
-// #endregion
-
+/**
+ * Notification model for notification operations
+ */
 @Injectable()
-export class NotificationModel extends BaseModel {
-  // #region mention
-
-  async createMention(input: MentionNotificationCreate) {
-    const data = MentionNotificationCreateSchema.parse(input);
-    const row = await this.create({
-      userId: data.userId,
-      level: data.level,
-      type: NotificationType.Mention,
-      body: data.body,
-    });
-    this.logger.debug(
-      `Created mention notification:${row.id} for user:${data.userId} in workspace:${data.body.workspaceId}`
-    );
-    return row as MentionNotification;
+export class NotificationModel extends BaseModel<Notification> {
+  constructor(protected readonly prisma: PrismaService) {
+    super(prisma);
   }
 
-  // #endregion
-
-  // #region invitation
-
-  async createInvitation(
-    input: InvitationNotificationCreate,
-    type: NotificationType = NotificationType.Invitation
-  ) {
-    const data = InvitationNotificationCreateSchema.parse(input);
-    const row = await this.create({
-      userId: data.userId,
-      level: data.level,
-      type,
-      body: data.body,
-    });
-    this.logger.debug(
-      `Created ${type} notification ${row.id} to user ${data.userId} in workspace ${data.body.workspaceId}`
-    );
-    return row as InvitationNotification;
+  /**
+   * Get the Prisma model delegate
+   */
+  protected get model() {
+    return this.prisma.notification;
   }
 
-  async createInvitationReviewDeclined(
-    input: InvitationReviewDeclinedNotificationCreate
-  ) {
-    const data = InvitationReviewDeclinedNotificationCreateSchema.parse(input);
-    const type = NotificationType.InvitationReviewDeclined;
-    const row = await this.create({
-      userId: data.userId,
-      level: data.level,
-      type,
-      body: data.body,
-    });
-    this.logger.debug(
-      `Created ${type} notification ${row.id} to user ${data.userId} in workspace ${data.body.workspaceId}`
-    );
-    return row as InvitationReviewDeclinedNotification;
-  }
-
-  // #endregion
-
-  // #region common
-
-  private async create(data: Prisma.NotificationUncheckedCreateInput) {
-    return await this.db.notification.create({
-      data,
-    });
-  }
-
-  async markAsRead(notificationId: string, userId: string) {
-    await this.db.notification.update({
-      where: { id: notificationId, userId },
-      data: {
-        read: true,
+  /**
+   * Find notifications by user ID
+   * @param userId The user ID
+   * @param options Query options
+   * @returns The notifications
+   */
+  async findByUser(userId: string, options: any = {}): Promise<Notification[]> {
+    return this.findMany(
+      { userId },
+      {
+        orderBy: { createdAt: 'desc' },
+        ...options,
       },
+    );
+  }
+
+  /**
+   * Find unread notifications by user ID
+   * @param userId The user ID
+   * @param options Query options
+   * @returns The unread notifications
+   */
+  async findUnreadByUser(userId: string, options: any = {}): Promise<Notification[]> {
+    return this.findMany(
+      { userId, read: false },
+      {
+        orderBy: { createdAt: 'desc' },
+        ...options,
+      },
+    );
+  }
+
+  /**
+   * Create a new notification
+   * @param data The notification data
+   * @returns The created notification
+   */
+  async createNotification(
+    data: Omit<Notification, 'id' | 'createdAt' | 'updatedAt' | 'read' | 'readAt' | 'dismissed' | 'emailSent' | 'emailSentAt'>,
+  ): Promise<Notification> {
+    return this.create({
+      ...data,
+      read: false,
+      readAt: null,
+      dismissed: false,
+      emailSent: false,
+      emailSentAt: null,
     });
   }
 
   /**
-   * Find many notifications by user id, exclude read notifications by default
+   * Mark a notification as read
+   * @param id The notification ID
+   * @returns The updated notification
    */
-  async findManyByUserId(
-    userId: string,
-    options?: {
-      includeRead?: boolean;
-    } & PaginationInput
-  ) {
-    const rows = await this.db.notification.findMany({
-      where: {
-        userId,
-        ...(options?.includeRead ? {} : { read: false }),
-        ...(options?.after ? { createdAt: { lt: options.after } } : {}),
-      },
-      orderBy: { createdAt: 'desc' },
-      skip: options?.offset,
-      take: options?.first,
+  async markAsRead(id: string): Promise<Notification> {
+    return this.update(id, {
+      read: true,
+      readAt: new Date(),
     });
-    return rows as UnionNotification[];
   }
 
-  async countByUserId(userId: string, options: { includeRead?: boolean } = {}) {
-    return this.db.notification.count({
-      where: {
-        userId,
-        ...(options.includeRead ? {} : { read: false }),
+  /**
+   * Mark all notifications as read for a user
+   * @param userId The user ID
+   * @returns The count of updated notifications
+   */
+  async markAllAsRead(userId: string): Promise<number> {
+    const result = await this.prisma.notification.updateMany({
+      where: { userId, read: false },
+      data: {
+        read: true,
+        readAt: new Date(),
       },
     });
+    
+    return result.count;
   }
 
-  async get(notificationId: string) {
-    const row = await this.db.notification.findUnique({
-      where: { id: notificationId },
+  /**
+   * Dismiss a notification
+   * @param id The notification ID
+   * @returns The updated notification
+   */
+  async dismiss(id: string): Promise<Notification> {
+    return this.update(id, {
+      dismissed: true,
     });
-    return row as UnionNotification;
   }
 
-  async cleanExpiredNotifications() {
-    const { count } = await this.db.notification.deleteMany({
-      // delete notifications that are older than one year
-      where: { createdAt: { lte: new Date(Date.now() - ONE_YEAR) } },
+  /**
+   * Dismiss all notifications for a user
+   * @param userId The user ID
+   * @returns The count of updated notifications
+   */
+  async dismissAll(userId: string): Promise<number> {
+    const result = await this.prisma.notification.updateMany({
+      where: { userId, dismissed: false },
+      data: {
+        dismissed: true,
+      },
     });
-    if (count > 0) {
-      this.logger.log(`Deleted ${count} expired notifications`);
-    }
-    return count;
+    
+    return result.count;
   }
 
-  // #endregion
+  /**
+   * Mark a notification as email sent
+   * @param id The notification ID
+   * @returns The updated notification
+   */
+  async markAsEmailSent(id: string): Promise<Notification> {
+    return this.update(id, {
+      emailSent: true,
+      emailSentAt: new Date(),
+    });
+  }
+
+  /**
+   * Get count of unread notifications for a user
+   * @param userId The user ID
+   * @returns The count of unread notifications
+   */
+  async getUnreadCount(userId: string): Promise<number> {
+    return this.count({ userId, read: false });
+  }
+
+  /**
+   * Delete old notifications
+   * @param olderThan Date threshold
+   * @returns The count of deleted notifications
+   */
+  async deleteOldNotifications(olderThan: Date): Promise<number> {
+    const result = await this.prisma.notification.deleteMany({
+      where: {
+        createdAt: {
+          lt: olderThan,
+        },
+      },
+    });
+    
+    return result.count;
+  }
 }

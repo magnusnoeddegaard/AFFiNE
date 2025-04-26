@@ -1,32 +1,23 @@
-import './config';
-
 import { Module } from '@nestjs/common';
-
-import { FeatureModule } from '../features';
-import { MailModule } from '../mail';
-import { QuotaModule } from '../quota';
-import { UserModule } from '../user';
-import { AuthController } from './controller';
-import { AuthGuard, AuthWebsocketOptionsProvider } from './guard';
-import { AuthCronJob } from './job';
-import { AuthResolver } from './resolver';
 import { AuthService } from './service';
+import { AuthController } from './controller';
+import { AuthResolver } from './resolver';
+import { SessionService } from './session';
+import { JwtModule } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 
 @Module({
-  imports: [FeatureModule, UserModule, QuotaModule, MailModule],
-  providers: [
-    AuthService,
-    AuthResolver,
-    AuthGuard,
-    AuthCronJob,
-    AuthWebsocketOptionsProvider,
+  imports: [
+    JwtModule.registerAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        secret: configService.get('JWT_SECRET'),
+        signOptions: { expiresIn: '7d' },
+      }),
+    }),
   ],
-  exports: [AuthService, AuthGuard, AuthWebsocketOptionsProvider],
+  providers: [AuthService, AuthResolver, SessionService],
   controllers: [AuthController],
+  exports: [AuthService, SessionService],
 })
 export class AuthModule {}
-
-export * from './guard';
-export { ClientTokenType } from './resolver';
-export { AuthService };
-export * from './session';

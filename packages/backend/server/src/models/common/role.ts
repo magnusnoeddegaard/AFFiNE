@@ -1,18 +1,55 @@
-export enum DocRole {
-  /**
-   * `None` equals to `role = null`, it only exists to give a value that API can use
-   */
-  None = -(1 << 15),
-  External = 0,
-  Reader = 10,
-  Editor = 20,
-  Manager = 30,
-  Owner = 99,
+import { Timestamps } from './index';
+
+/**
+ * Resource types for permissions
+ */
+export enum ResourceType {
+  DOCUMENT = 'DOCUMENT',
+  WORKSPACE = 'WORKSPACE',
+  BLOB = 'BLOB',
 }
 
-export enum WorkspaceRole {
-  External = -99,
-  Collaborator = 1,
-  Admin = 10,
-  Owner = 99,
+/**
+ * Permission levels
+ */
+export enum PermissionLevel {
+  NONE = 'NONE',
+  READ = 'READ',
+  COMMENT = 'COMMENT',
+  WRITE = 'WRITE',
+  ADMIN = 'ADMIN',
+  OWNER = 'OWNER',
+}
+
+/**
+ * Permission base interface
+ */
+export interface PermissionBase extends Timestamps {
+  id: string;
+  resourceType: ResourceType;
+  resourceId: string;
+  userId: string | null;
+  workspaceId: string | null;
+  userGroupId: string | null;
+  level: PermissionLevel;
+  inheritFrom: string | null;
+}
+
+/**
+ * User group for permissions
+ */
+export interface UserGroup extends Timestamps {
+  id: string;
+  name: string;
+  description: string | null;
+  workspaceId: string;
+}
+
+/**
+ * User group member relation
+ */
+export interface UserGroupMember extends Timestamps {
+  id: string;
+  userGroupId: string;
+  userId: string;
 }

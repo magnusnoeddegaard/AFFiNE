@@ -1,0 +1,416 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User related models
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  name          String?
+  avatarUrl     String?
+  lastLoginAt   DateTime?
+  isActive      Boolean        @default(true)
+  authId        String         @unique // Reference to Supabase auth user
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  // Relations
+  settings      UserSettings?
+  sessions      Session[]
+  tokens        VerificationToken[]
+  notifications Notification[]
+  documents     DocumentUser[]
+  workspaces    WorkspaceUser[]
+  ownedWorkspaces Workspace[]
+  userGroups    UserGroupMember[]
+  permissions   Permission[]   @relation("UserPermissions")
+  documentHistory DocumentHistory[] @relation("CreatedBy")
+  leadingTeams  Team[]        @relation("TeamLeader")
+  teamMemberships TeamMember[] @relation("TeamUser")
+  addedTeamMembers TeamMember[] @relation("TeamMemberAdder")
+
+  @@index([email])
+  @@index([authId])
+}
+
+model UserSettings {
+  id           String       @id @default(uuid())
+  userId       String       @unique
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  theme        String       @default("SYSTEM")
+  locale       String       @default("en-US")
+  timezone     String       @default("UTC")
+  notificationPreferences Json
+  editorSettings Json
+  customizations Json       @default("{}")
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([userId])
+}
+
+// Document related models
+
+enum DocumentType {
+  DOC
+  PAGE
+  WHITEBOARD
+}
+
+enum DocumentVisibility {
+  PRIVATE
+  RESTRICTED
+  PUBLIC
+}
+
+model Document {
+  id          String       @id @default(uuid())
+  title       String
+  type        DocumentType @default(DOC)
+  visibility  DocumentVisibility @default(PRIVATE)
+  workspaceId String
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  parentId    String?
+  parent      Document?    @relation("DocumentHierarchy", fields: [parentId], references: [id], onUpdate: NoAction, onDelete: SetNull)
+  children    Document[]   @relation("DocumentHierarchy")
+  order       Int?
+  favorite    Boolean      @default(false)
+  favoriteOrder Int?
+  properties  Json?        @default("{}")
+  deleted     Boolean      @default(false)
+  deletedAt   DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relations
+  contents    DocumentContent[]
+  users       DocumentUser[]
+  history     DocumentHistory[]
+  permissions Permission[] @relation("DocumentPermissions")
+
+  @@index([workspaceId])
+  @@index([parentId])
+  @@index([deleted])
+  @@index([favorite])
+}
+
+model DocumentContent {
+  id          String       @id @default(uuid())
+  documentId  String
+  document    Document     @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  version     Int
+  content     String       @db.Text
+  blobIds     String[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relations
+  history     DocumentHistory[]
+
+  @@index([documentId])
+  @@index([documentId, version])
+}
+
+model DocumentHistory {
+  id          String       @id @default(uuid())
+  documentId  String
+  document    Document     @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  contentId   String
+  content     DocumentContent @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  version     Int
+  createdById String
+  createdBy   User         @relation("CreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  message     String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([documentId])
+  @@index([contentId])
+  @@index([createdById])
+}
+
+enum DocumentPermission {
+  NONE
+  READ
+  COMMENT
+  WRITE
+  ADMIN
+  OWNER
+}
+
+model DocumentUser {
+  id          String       @id @default(uuid())
+  documentId  String
+  document    Document     @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission  DocumentPermission
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([documentId, userId])
+  @@index([documentId])
+  @@index([userId])
+}
+
+// Workspace related models
+
+enum WorkspaceVisibility {
+  PRIVATE
+  RESTRICTED
+  PUBLIC
+}
+
+model Workspace {
+  id          String       @id @default(uuid())
+  name        String
+  description String?
+  avatarUrl   String?
+  visibility  WorkspaceVisibility @default(PRIVATE)
+  ownerId     String
+  owner       User         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  settings    Json
+  deleted     Boolean      @default(false)
+  deletedAt   DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relations
+  documents   Document[]
+  users       WorkspaceUser[]
+  permissions Permission[] @relation("WorkspacePermissions")
+  userGroups  UserGroup[]
+  teams       Team[]
+
+  @@index([ownerId])
+  @@index([deleted])
+}
+
+enum WorkspaceUserRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+model WorkspaceUser {
+  id          String       @id @default(uuid())
+  workspaceId String
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        WorkspaceUserRole
+  invitedBy   String?
+  invitedAt   DateTime?
+  joinedAt    DateTime?
+  settings    Json
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([workspaceId, userId])
+  @@index([workspaceId])
+  @@index([userId])
+}
+
+// Team related models
+
+model Team {
+  id          String       @id @default(uuid())
+  name        String
+  description String?
+  avatarUrl   String?
+  workspaceId String
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leaderId    String?
+  leader      User?        @relation("TeamLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+  settings    Json
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relations
+  members     TeamMember[]
+
+  @@index([workspaceId])
+  @@index([leaderId])
+}
+
+model TeamMember {
+  id          String       @id @default(uuid())
+  teamId      String
+  team        Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User         @relation("TeamUser", fields: [userId], references: [id], onDelete: Cascade)
+  role        String
+  addedBy     String
+  addedByUser User         @relation("TeamMemberAdder", fields: [addedBy], references: [id])
+  addedAt     DateTime
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([teamId, userId])
+  @@index([teamId])
+  @@index([userId])
+}
+
+// Permission related models
+
+enum ResourceType {
+  DOCUMENT
+  WORKSPACE
+  BLOB
+}
+
+enum PermissionLevel {
+  NONE
+  READ
+  COMMENT
+  WRITE
+  ADMIN
+  OWNER
+}
+
+model Permission {
+  id          String       @id @default(uuid())
+  resourceType ResourceType
+  resourceId  String
+  userId      String?
+  user        User?        @relation("UserPermissions", fields: [userId], references: [id], onDelete: Cascade)
+  workspaceId String?
+  workspace   Workspace?   @relation("WorkspacePermissions", fields: [workspaceId], references: [id], onDelete: Cascade)
+  userGroupId String?
+  userGroup   UserGroup?   @relation("GroupPermissions", fields: [userGroupId], references: [id], onDelete: Cascade)
+  level       PermissionLevel
+  inheritFrom String?
+  document    Document?    @relation("DocumentPermissions", fields: [resourceId], references: [id], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([resourceType, resourceId])
+  @@index([userId])
+  @@index([workspaceId])
+  @@index([userGroupId])
+}
+
+model UserGroup {
+  id          String       @id @default(uuid())
+  name        String
+  description String?
+  workspaceId String
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Relations
+  members     UserGroupMember[]
+  permissions Permission[] @relation("GroupPermissions")
+
+  @@index([workspaceId])
+}
+
+model UserGroupMember {
+  id          String       @id @default(uuid())
+  userGroupId String
+  userGroup   UserGroup    @relation(fields: [userGroupId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([userGroupId, userId])
+  @@index([userGroupId])
+  @@index([userId])
+}
+
+// Notification related models
+
+enum NotificationType {
+  DOCUMENT_UPDATED
+  DOCUMENT_SHARED
+  COMMENT_ADDED
+  COMMENT_REPLIED
+  WORKSPACE_INVITATION
+  WORKSPACE_ROLE_CHANGED
+  MENTION
+  SYSTEM
+  TEAM_INVITATION
+  TEAM_ROLE_CHANGED
+}
+
+model Notification {
+  id          String       @id @default(uuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        NotificationType
+  title       String
+  message     String
+  data        Json
+  read        Boolean      @default(false)
+  readAt      DateTime?
+  dismissed   Boolean      @default(false)
+  email       Boolean      @default(false)
+  emailSent   Boolean      @default(false)
+  emailSentAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([userId])
+  @@index([userId, read])
+  @@index([type])
+}
+
+// Authentication related models
+
+enum VerificationTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  INVITE
+}
+
+model VerificationToken {
+  id          String       @id @default(uuid())
+  token       String       @unique
+  type        VerificationTokenType
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email       String
+  expires     DateTime
+  used        Boolean      @default(false)
+  usedAt      DateTime?
+  data        Json
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([token])
+  @@index([userId])
+  @@index([email])
+  @@index([type])
+  @@index([expires])
+  @@index([used])
+}
+
+model Session {
+  id          String       @id @default(uuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token       String       @unique
+  ipAddress   String?
+  userAgent   String?
+  lastActive  DateTime
+  expires     DateTime
+  data        Json
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([userId])
+  @@index([token])
+  @@index([expires])
+}
