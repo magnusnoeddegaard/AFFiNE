@@ -23,7 +23,7 @@ import { Module } from '@nestjs/common';
 import { AgentFactory } from './agents/agent-factory';
 import { registerAgentCreators } from './agents/agent-creators';
 import { ContextService } from './context/context-service';
-import { DefaultEmbeddingService } from './context/embedding-service';
+import { DefaultEmbeddingService, EMBEDDING_SERVICE, EmbeddingServiceConfig } from './context/embedding-service';
 import { DocumentProcessorRegistry } from './context/document-processor';
 import { PromptManager } from './prompt/prompt-manager';
 import { StateManager } from './state/state-manager';
@@ -40,7 +40,7 @@ import { OpenAIProvider } from './providers/openai-provider';
     // Core services
     AgentFactory,
     {
-      provide: 'EmbeddingService',
+      provide: EMBEDDING_SERVICE,
       useFactory: () => {
         // Use OpenAI for embeddings
         const openaiProvider = new OpenAIProvider({
@@ -48,9 +48,9 @@ import { OpenAIProvider } from './providers/openai-provider';
           model: 'text-embedding-3-small'
         });
         
-        return new DefaultEmbeddingService({
+        const config: EmbeddingServiceConfig = {
           name: 'openai',
-          embedText: async (text) => {
+          embedText: async (text: string) => {
             try {
               // Try to use OpenAI for embeddings if API key is configured
               return await openaiProvider.createEmbedding(text);
@@ -60,13 +60,15 @@ import { OpenAIProvider } from './providers/openai-provider';
               return Array(1536).fill(0).map(() => Math.random() * 2 - 1);
             }
           }
-        });
+        };
+        
+        return new DefaultEmbeddingService(config);
       }
     },
     {
       provide: ContextService,
       useFactory: (embeddingService) => new ContextService(embeddingService),
-      inject: ['EmbeddingService']
+      inject: [EMBEDDING_SERVICE]
     },
     {
       provide: 'DocumentProcessor',
@@ -100,7 +102,7 @@ import { OpenAIProvider } from './providers/openai-provider';
   ],
   exports: [
     AgentFactory,
-    'EmbeddingService',
+    EMBEDDING_SERVICE,
     ContextService,
     'DocumentProcessor',
     PromptManager,

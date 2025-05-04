@@ -1,7 +1,5 @@
-import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../base/prisma';
-import { MutexService } from '../../base/mutex';
-import { StorageService } from '../../base/storage';
 import {
   CreateDocumentInput,
   Document,
@@ -11,292 +9,334 @@ import {
   UpdateDocumentContentInput,
   UpdateDocumentInput,
 } from './types';
-import { v4 as uuidv4 } from 'uuid';
+
+// Define interface for Document type
+interface DocType {
+  id: string;
+  title: string;
+  type: string;
+  updatedAt: Date;
+  [key: string]: any; // For any other properties
+}
+
+// Define a more comprehensive document model interface
+interface DocumentModel {
+  id: string;
+  title: string;
+  description: string;
+  type: string;
+  status: string;
+  createdById: string;
+  workspaceId?: string;
+  parentId?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 @Injectable()
 export class DocumentService {
+  private readonly logger = new Logger(DocumentService.name);
+
   constructor(
-    private prisma: PrismaService,
-    private mutexService: MutexService,
-    private storageService: StorageService,
+    private prisma: PrismaService
   ) {}
 
-  async createDocument(userId: string, input: CreateDocumentInput): Promise<Document> {
-    const documentId = uuidv4();
-
-    const document = await this.prisma.document.create({
-      data: {
-        id: documentId,
-        title: input.title,
-        description: input.description,
-        type: input.type,
-        status: 'ACTIVE',
-        createdById: userId,
-        workspaceId: input.workspaceId,
-        parentId: input.parentId,
-      },
-    });
-
-    // Create initial empty content
-    await this.prisma.documentContent.create({
-      data: {
-        documentId: document.id,
-        content: JSON.stringify({ type: 'doc', content: [] }),
-      },
-    });
-
-    return {
-      id: document.id,
-      title: document.title,
-      description: document.description,
-      type: document.type as any,
-      status: document.status as any,
-      createdBy: document.createdById,
-      workspaceId: document.workspaceId,
-      createdAt: document.createdAt,
-      updatedAt: document.updatedAt,
-    };
-  }
-
-  async getDocument(userId: string, documentId: string): Promise<Document> {
-    const document = await this.prisma.document.findUnique({
-      where: { id: documentId },
-    });
-
-    if (!document) {
-      throw new NotFoundException(`Document with ID ${documentId} not found`);
-    }
-
-    // Check if user has access to this document
-    const hasAccess = await this.checkUserAccess(userId, documentId);
+  /**
+   * Create a new document
+   */
+  async createDocument(userId: string, document: CreateDocumentInput): Promise<Document> {
+    this.logger.debug(`Creating document for user ${userId}`);
     
-    if (!hasAccess) {
-      throw new UnauthorizedException('You do not have access to this document');
-    }
+    try {
+      const newDocument = await this.prisma.document.create({
+        data: {
+          title: document.title,
+          description: document.description || '',
+          type: document.type,
+          status: 'ACTIVE',
+          createdById: userId,
+          workspaceId: document.workspaceId,
+          parentId: document.parentId,
+        },
+      });
 
-    return {
-      id: document.id,
-      title: document.title,
-      description: document.description,
-      type: document.type as any,
-      status: document.status as any,
-      createdBy: document.createdById,
-      workspaceId: document.workspaceId,
-      createdAt: document.createdAt,
-      updatedAt: document.updatedAt,
-    };
+      // Create empty content for the document
+      await this.prisma.documentContent.create({
+        data: {
+          documentId: newDocument.id,
+          content: '',
+        },
+      });
+
+      return {
+        id: newDocument.id,
+        title: newDocument.title,
+        description: newDocument.description,
+        type: newDocument.type,
+        status: newDocument.status,
+        createdBy: newDocument.createdById,
+        workspaceId: newDocument.workspaceId,
+        createdAt: newDocument.createdAt,
+        updatedAt: newDocument.updatedAt,
+      };
+    } catch (error) {
+      this.logger.error(`Error creating document: ${error.message}`, error.stack);
+      throw error;
+    }
   }
 
-  async getDocuments(userId: string, filters?: DocumentFilters): Promise<Document[]> {
-    // Build filter conditions
-    const where: any = {
-      OR: [
-        { createdById: userId },
-        // Add workspace access conditions here
-        // Will be expanded when workspace permissions are implemented
-      ],
-    };
-
-    if (filters?.types?.length) {
-      where.type = { in: filters.types };
-    }
-
-    if (filters?.statuses?.length) {
-      where.status = { in: filters.statuses };
-    }
-
-    if (filters?.workspaceId) {
-      where.workspaceId = filters.workspaceId;
-    }
-
-    if (filters?.parentId) {
-      where.parentId = filters.parentId;
-    }
-
-    const documents = await this.prisma.document.findMany({
-      where,
-      orderBy: { updatedAt: 'desc' },
-    });
-
-    return documents.map((doc) => ({
-      id: doc.id,
-      title: doc.title,
-      description: doc.description,
-      type: doc.type as any,
-      status: doc.status as any,
-      createdBy: doc.createdById,
-      workspaceId: doc.workspaceId,
-      createdAt: doc.createdAt,
-      updatedAt: doc.updatedAt,
-    }));
-  }
-
-  async updateDocument(userId: string, documentId: string, input: UpdateDocumentInput): Promise<Document> {
-    const document = await this.prisma.document.findUnique({
-      where: { id: documentId },
-    });
-
-    if (!document) {
-      throw new NotFoundException(`Document with ID ${documentId} not found`);
-    }
-
-    // Check if user has access to this document
-    const hasAccess = await this.checkUserAccess(userId, documentId);
+  /**
+   * Get document by ID
+   */
+  async getDocument(userId: string, id: string): Promise<Document> {
+    this.logger.debug(`Getting document ${id} for user ${userId}`);
     
-    if (!hasAccess) {
-      throw new UnauthorizedException('You do not have access to this document');
-    }
-
-    const updatedDocument = await this.prisma.document.update({
-      where: { id: documentId },
-      data: {
-        title: input.title !== undefined ? input.title : undefined,
-        description: input.description !== undefined ? input.description : undefined,
-        status: input.status !== undefined ? input.status : undefined,
-        updatedAt: new Date(),
-      },
-    });
-
-    return {
-      id: updatedDocument.id,
-      title: updatedDocument.title,
-      description: updatedDocument.description,
-      type: updatedDocument.type as any,
-      status: updatedDocument.status as any,
-      createdBy: updatedDocument.createdById,
-      workspaceId: updatedDocument.workspaceId,
-      createdAt: updatedDocument.createdAt,
-      updatedAt: updatedDocument.updatedAt,
-    };
-  }
-
-  async deleteDocument(userId: string, documentId: string): Promise<boolean> {
-    const document = await this.prisma.document.findUnique({
-      where: { id: documentId },
-    });
-
-    if (!document) {
-      throw new NotFoundException(`Document with ID ${documentId} not found`);
-    }
-
-    // Check if user has access to this document
-    const hasAccess = await this.checkUserAccess(userId, documentId);
-    
-    if (!hasAccess) {
-      throw new UnauthorizedException('You do not have access to this document');
-    }
-
-    // Soft delete by updating status to TRASHED
-    await this.prisma.document.update({
-      where: { id: documentId },
-      data: {
-        status: DocumentStatus.TRASHED,
-        updatedAt: new Date(),
-      },
-    });
-
-    return true;
-  }
-
-  async permanentlyDeleteDocument(userId: string, documentId: string): Promise<boolean> {
-    const document = await this.prisma.document.findUnique({
-      where: { id: documentId },
-    });
-
-    if (!document) {
-      throw new NotFoundException(`Document with ID ${documentId} not found`);
-    }
-
-    // Check if user has access to this document and is owner
-    const hasAccess = await this.checkUserAccess(userId, documentId, true);
-    
-    if (!hasAccess) {
-      throw new UnauthorizedException('You do not have access to permanently delete this document');
-    }
-
-    // Permanently delete document and its content
-    await this.prisma.$transaction([
-      this.prisma.documentContent.deleteMany({
-        where: { documentId },
-      }),
-      this.prisma.document.delete({
-        where: { id: documentId },
-      }),
-    ]);
-
-    return true;
-  }
-
-  async getDocumentContent(userId: string, documentId: string): Promise<DocumentContent> {
-    const document = await this.prisma.document.findUnique({
-      where: { id: documentId },
-    });
-
-    if (!document) {
-      throw new NotFoundException(`Document with ID ${documentId} not found`);
-    }
-
-    // Check if user has access to this document
-    const hasAccess = await this.checkUserAccess(userId, documentId);
-    
-    if (!hasAccess) {
-      throw new UnauthorizedException('You do not have access to this document');
-    }
-
-    const content = await this.prisma.documentContent.findUnique({
-      where: { documentId },
-    });
-
-    if (!content) {
-      throw new NotFoundException(`Content for document with ID ${documentId} not found`);
-    }
-
-    return {
-      id: content.id,
-      documentId: content.documentId,
-      content: content.content,
-      updatedAt: content.updatedAt,
-    };
-  }
-
-  async updateDocumentContent(
-    userId: string, 
-    documentId: string, 
-    input: UpdateDocumentContentInput
-  ): Promise<DocumentContent> {
-    return this.mutexService.runWithLock(`document:${documentId}`, async () => {
-      const document = await this.prisma.document.findUnique({
-        where: { id: documentId },
+    try {
+      const document = await this.prisma.document.findFirst({
+        where: {
+          id,
+          createdById: userId,
+        },
       });
 
       if (!document) {
-        throw new NotFoundException(`Document with ID ${documentId} not found`);
+        throw new Error(`Document not found: ${id}`);
       }
 
-      // Check if user has access to this document
-      const hasAccess = await this.checkUserAccess(userId, documentId);
-      
-      if (!hasAccess) {
-        throw new UnauthorizedException('You do not have access to this document');
+      return {
+        id: document.id,
+        title: document.title,
+        description: document.description,
+        type: document.type,
+        status: document.status,
+        createdBy: document.createdById,
+        workspaceId: document.workspaceId,
+        createdAt: document.createdAt,
+        updatedAt: document.updatedAt,
+      };
+    } catch (error) {
+      this.logger.error(`Error getting document: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  /**
+   * Get documents with filters
+   */
+  async getDocuments(userId: string, filters?: DocumentFilters): Promise<Document[]> {
+    this.logger.debug(`Getting documents for user ${userId} with filters`);
+    
+    try {
+      const where: any = {
+        createdById: userId,
+      };
+
+      if (filters?.types && filters.types.length > 0) {
+        where.type = { in: filters.types };
       }
 
-      const content = await this.prisma.documentContent.upsert({
-        where: { documentId },
-        update: {
-          content: input.content,
-          updatedAt: new Date(),
-        },
-        create: {
-          documentId,
-          content: input.content,
+      if (filters?.statuses && filters.statuses.length > 0) {
+        where.status = { in: filters.statuses };
+      }
+
+      if (filters?.workspaceId) {
+        where.workspaceId = filters.workspaceId;
+      }
+
+      if (filters?.parentId) {
+        where.parentId = filters.parentId;
+      }
+
+      const documents = await this.prisma.document.findMany({
+        where,
+        orderBy: {
+          updatedAt: 'desc',
         },
       });
 
-      // Update the document's lastUpdated timestamp
+      return documents.map((doc: DocumentModel) => ({
+        id: doc.id,
+        title: doc.title,
+        description: doc.description,
+        type: doc.type,
+        status: doc.status,
+        createdBy: doc.createdById,
+        workspaceId: doc.workspaceId,
+        createdAt: doc.createdAt,
+        updatedAt: doc.updatedAt,
+      }));
+    } catch (error) {
+      this.logger.error(`Error getting documents: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  /**
+   * Update document by ID
+   */
+  async updateDocument(userId: string, id: string, document: UpdateDocumentInput): Promise<Document> {
+    this.logger.debug(`Updating document ${id} for user ${userId}`);
+    
+    try {
+      const existingDocument = await this.prisma.document.findFirst({
+        where: {
+          id,
+          createdById: userId,
+        },
+      });
+
+      if (!existingDocument) {
+        throw new Error(`Document not found: ${id}`);
+      }
+
+      const updatedDocument = await this.prisma.document.update({
+        where: { id },
+        data: {
+          title: document.title !== undefined ? document.title : undefined,
+          description: document.description !== undefined ? document.description : undefined,
+          status: document.status !== undefined ? document.status : undefined,
+        },
+      });
+
+      return {
+        id: updatedDocument.id,
+        title: updatedDocument.title,
+        description: updatedDocument.description,
+        type: updatedDocument.type,
+        status: updatedDocument.status,
+        createdBy: updatedDocument.createdById,
+        workspaceId: updatedDocument.workspaceId,
+        createdAt: updatedDocument.createdAt,
+        updatedAt: updatedDocument.updatedAt,
+      };
+    } catch (error) {
+      this.logger.error(`Error updating document: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete document by ID (Moves to trash)
+   */
+  async deleteDocument(userId: string, id: string): Promise<boolean> {
+    this.logger.debug(`Deleting document ${id} for user ${userId}`);
+    
+    try {
+      const existingDocument = await this.prisma.document.findFirst({
+        where: {
+          id,
+          createdById: userId,
+        },
+      });
+
+      if (!existingDocument) {
+        return false;
+      }
+
+      // Move to trash instead of deleting
       await this.prisma.document.update({
-        where: { id: documentId },
-        data: { updatedAt: new Date() },
+        where: { id },
+        data: {
+          status: 'TRASHED',
+        },
       });
+
+      return true;
+    } catch (error) {
+      this.logger.error(`Error deleting document: ${error.message}`, error.stack);
+      return false;
+    }
+  }
+
+  /**
+   * Permanently delete document by ID
+   */
+  async permanentlyDeleteDocument(userId: string, id: string): Promise<boolean> {
+    this.logger.debug(`Permanently deleting document ${id} for user ${userId}`);
+    
+    try {
+      const existingDocument = await this.prisma.document.findFirst({
+        where: {
+          id,
+          createdById: userId,
+        },
+      });
+
+      if (!existingDocument) {
+        return false;
+      }
+
+      // Delete document content first
+      await this.prisma.documentContent.delete({
+        where: { documentId: id },
+      });
+
+      // Delete the document
+      await this.prisma.document.delete({
+        where: { id },
+      });
+
+      return true;
+    } catch (error) {
+      this.logger.error(`Error permanently deleting document: ${error.message}`, error.stack);
+      return false;
+    }
+  }
+
+  /**
+   * Get document content by ID
+   */
+  async getDocContent(workspaceId: string, docId: string) {
+    this.logger.debug(`Getting document content for ${docId} in workspace ${workspaceId}`);
+    
+    try {
+      const document = await this.prisma.document.findFirst({
+        where: {
+          id: docId,
+          workspaceId: workspaceId,
+        },
+      });
+
+      if (!document) {
+        return null;
+      }
+
+      const content = await this.prisma.documentContent.findUnique({
+        where: { documentId: docId },
+      });
+
+      return content?.content || null;
+    } catch (error) {
+      this.logger.error(`Error getting document content: ${error.message}`, error.stack);
+      return null;
+    }
+  }
+
+  /**
+   * Get document content by ID
+   */
+  async getDocumentContent(userId: string, id: string): Promise<DocumentContent> {
+    this.logger.debug(`Getting document content for ${id} by user ${userId}`);
+    
+    try {
+      const document = await this.prisma.document.findFirst({
+        where: {
+          id,
+          createdById: userId,
+        },
+      });
+
+      if (!document) {
+        throw new Error(`Document not found: ${id}`);
+      }
+
+      const content = await this.prisma.documentContent.findUnique({
+        where: { documentId: id },
+      });
+
+      if (!content) {
+        throw new Error(`Document content not found: ${id}`);
+      }
 
       return {
         id: content.id,
@@ -304,46 +344,146 @@ export class DocumentService {
         content: content.content,
         updatedAt: content.updatedAt,
       };
-    });
+    } catch (error) {
+      this.logger.error(`Error getting document content: ${error.message}`, error.stack);
+      throw error;
+    }
   }
 
-  // Helper method to check if a user has access to a document
-  private async checkUserAccess(
-    userId: string, 
-    documentId: string, 
-    requireOwner: boolean = false
-  ): Promise<boolean> {
-    const document = await this.prisma.document.findUnique({
-      where: { id: documentId },
-    });
-
-    if (!document) {
-      return false;
-    }
-
-    // User is the creator
-    if (document.createdById === userId) {
-      return true;
-    }
-
-    // If we require owner permissions and user isn't the creator, deny access
-    if (requireOwner) {
-      return false;
-    }
-
-    // For now, simply check if this is a workspace document and the user is a member
-    // This will be expanded when proper permission model is implemented
-    if (document.workspaceId) {
-      const workspaceMember = await this.prisma.workspaceUser.findFirst({
+  /**
+   * Update document content by ID
+   */
+  async updateDocumentContent(userId: string, id: string, contentInput: UpdateDocumentContentInput): Promise<DocumentContent> {
+    this.logger.debug(`Updating document content for ${id} by user ${userId}`);
+    
+    try {
+      const document = await this.prisma.document.findFirst({
         where: {
-          workspaceId: document.workspaceId,
-          userId,
+          id,
+          createdById: userId,
         },
       });
 
-      return !!workspaceMember;
-    }
+      if (!document) {
+        throw new Error(`Document not found: ${id}`);
+      }
 
-    return false;
+      let content = await this.prisma.documentContent.findUnique({
+        where: { documentId: id },
+      });
+
+      if (!content) {
+        // Create content if it doesn't exist
+        content = await this.prisma.documentContent.create({
+          data: {
+            documentId: id,
+            content: contentInput.content,
+          },
+        });
+      } else {
+        // Update existing content
+        content = await this.prisma.documentContent.update({
+          where: { documentId: id },
+          data: {
+            content: contentInput.content,
+          },
+        });
+      }
+
+      return {
+        id: content.id,
+        documentId: content.documentId,
+        content: content.content,
+        updatedAt: content.updatedAt,
+      };
+    } catch (error) {
+      this.logger.error(`Error updating document content: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  /**
+   * Get full document content by ID
+   */
+  async getFullDocContent(workspaceId: string, docId: string) {
+    this.logger.debug(`Getting full doc content ${docId} from workspace ${workspaceId}`);
+    
+    try {
+      const document = await this.prisma.document.findFirst({
+        where: {
+          id: docId,
+          workspaceId: workspaceId,
+        },
+      });
+
+      if (!document) {
+        return null;
+      }
+
+      const content = await this.prisma.documentContent.findUnique({
+        where: { documentId: docId },
+      });
+
+      // Return full document with content
+      return {
+        id: document.id,
+        title: document.title,
+        description: document.description,
+        type: document.type,
+        status: document.status,
+        content: content?.content || '',
+        createdBy: document.createdById,
+        workspaceId: document.workspaceId,
+        createdAt: document.createdAt,
+        updatedAt: document.updatedAt,
+      };
+    } catch (error) {
+      this.logger.error(`Error getting full doc content: ${error.message}`, error.stack);
+      return null;
+    }
+  }
+
+  /**
+   * Get workspace content
+   */
+  async getWorkspaceContent(workspaceId: string) {
+    this.logger.debug(`Getting workspace content ${workspaceId}`);
+    
+    try {
+      // Check if workspace exists
+      const workspace = await this.prisma.workspace.findUnique({
+        where: { id: workspaceId },
+      });
+
+      if (!workspace) {
+        return null;
+      }
+
+      // Get all documents in the workspace
+      const documents = await this.prisma.document.findMany({
+        where: {
+          workspaceId: workspaceId,
+          status: 'ACTIVE',
+        },
+        orderBy: {
+          updatedAt: 'desc',
+        },
+      });
+
+      // Return workspace with documents
+      return {
+        id: workspace.id,
+        name: workspace.name,
+        documents: documents.map((doc: DocType) => ({
+          id: doc.id,
+          title: doc.title,
+          type: doc.type,
+          updatedAt: doc.updatedAt,
+        })),
+      };
+    } catch (error) {
+      this.logger.error(`Error getting workspace content: ${error.message}`, error.stack);
+      return null;
+    }
   }
 }

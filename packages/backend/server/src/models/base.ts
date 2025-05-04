@@ -1,5 +1,6 @@
-import { PrismaService } from '../base/prisma';
 import { Injectable } from '@nestjs/common';
+
+import { PrismaService } from '../base/prisma';
 
 /**
  * Base model with common functionality for all models
@@ -122,7 +123,7 @@ export abstract class BaseModel<T> {
    * @returns The result of the function
    */
   async transaction<R>(fn: (tx: any) => Promise<R>): Promise<R> {
-    return this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx: any) => {
       return fn(tx);
     });
   }

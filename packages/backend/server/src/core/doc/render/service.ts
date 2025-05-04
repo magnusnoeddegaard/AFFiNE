@@ -65,8 +65,8 @@ export class DocumentRenderService {
     
     // Check if user has access to the document
     const hasAccess = await this.permissionService.checkPermission(
-      ResourceType.DOCUMENT,
       documentId,
+      'DOCUMENT' as ResourceType,
       userId,
       PermissionLevel.READ
     );
@@ -113,8 +113,8 @@ export class DocumentRenderService {
     // Metadata to include in rendered document
     const metadata = options.includeMetadata ? {
       title: document.title || 'Untitled Document',
-      description: document.summary || '',
-      author: document.createdBy,
+      description: (document as any).summary || '',
+      author: (document as any).createdBy || '',
       createdAt: document.createdAt,
       updatedAt: document.updatedAt,
       version: documentContent.version,

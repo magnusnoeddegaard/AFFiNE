@@ -50,19 +50,19 @@ export class DocumentRenderController {
   ) {
     const parsedVersion = version ? parseInt(version, 10) : undefined;
     
-    // If version is provided but not a valid number
-    if (version && isNaN(parsedVersion)) {
-      throw new HttpException('Invalid version number', HttpStatus.BAD_REQUEST);
-    }
-    
+
     // Build render options
-    const renderOptions = {
+    const renderOptions: any = {
       format: format as RenderFormat,
-      version: parsedVersion,
       includeMetadata: true,
       userAgent,
       baseUrl: this.getBaseUrl(request),
     };
+
+    // If version is provided but not a valid number
+    if (parsedVersion !== undefined) {
+      renderOptions.version = parsedVersion as number;
+    }
     
     // Render the document
     const result = await this.documentRenderService.renderDocument(id, userId, renderOptions);

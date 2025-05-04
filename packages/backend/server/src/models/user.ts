@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+
 import { PrismaService } from '../base/prisma';
 import { BaseModel } from './base';
 import { UserBase } from './common';
@@ -47,14 +48,14 @@ export class UserModel extends BaseModel<UserBase> {
    * @returns The created user
    */
   async createWithSettings(
-    userData: Omit<UserBase, 'id' | 'createdAt' | 'updatedAt'>,
+    userData: Omit<UserBase, 'id' | 'createdAt' | 'updatedAt'>
   ): Promise<UserBase> {
-    return this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx: any) => {
       // Create the user
       const user = await tx.user.create({
         data: userData,
       });
-      
+
       // Create default user settings
       await tx.userSettings.create({
         data: {
@@ -82,7 +83,7 @@ export class UserModel extends BaseModel<UserBase> {
           customizations: {},
         },
       });
-      
+
       return user;
     });
   }
@@ -95,7 +96,7 @@ export class UserModel extends BaseModel<UserBase> {
    */
   async updateProfile(
     id: string,
-    data: Pick<UserBase, 'name' | 'avatarUrl'>,
+    data: Pick<UserBase, 'name' | 'avatarUrl'>
   ): Promise<UserBase> {
     return this.update(id, data);
   }

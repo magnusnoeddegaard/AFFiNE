@@ -1,7 +1,10 @@
 import { Module } from '@nestjs/common';
-import { StorageService } from './storage.service';
+
 import { StorageProviderFactory } from './providers/factory';
 import { FileSystemStorageProvider } from './providers/fs.provider';
+import { StorageService } from './storage.service';
+
+export { StorageService } from './storage.service';
 
 @Module({
   providers: [

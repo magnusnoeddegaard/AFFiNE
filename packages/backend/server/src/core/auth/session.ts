@@ -31,14 +31,14 @@ export class SessionService {
       createdAt: new Date(),
       metadata,
       lastActive: new Date(),
+      // Add TTL directly in the data if your implementation handles it that way
+      ttl: this.sessionTTL,
     };
     
-    // Store in Redis with TTL
-    await this.redis.client.set(
+    // Store in Redis with just key and value
+    await this.redis.set(
       `${this.sessionPrefix}${sessionId}`,
-      JSON.stringify(sessionData),
-      'EX',
-      this.sessionTTL
+      JSON.stringify(sessionData)
     );
     
     // Store session in database for tracking
@@ -59,7 +59,7 @@ export class SessionService {
    */
   async getSession(sessionId: string) {
     const sessionKey = `${this.sessionPrefix}${sessionId}`;
-    const sessionData = await this.redis.client.get(sessionKey);
+    const sessionData = await this.redis.get(sessionKey);
     
     if (!sessionData) {
       return null;
@@ -76,17 +76,18 @@ export class SessionService {
    */
   async updateSessionActivity(sessionId: string) {
     const sessionKey = `${this.sessionPrefix}${sessionId}`;
-    const sessionData = await this.redis.client.get(sessionKey);
+    const sessionData = await this.redis.get(sessionKey);
     
     if (sessionData) {
       const session = JSON.parse(sessionData);
       session.lastActive = new Date();
+      // Make sure TTL is preserved in the data
+      session.ttl = this.sessionTTL;
       
-      await this.redis.client.set(
+      // Using just key and value
+      await this.redis.set(
         sessionKey,
-        JSON.stringify(session),
-        'EX',
-        this.sessionTTL
+        JSON.stringify(session)
       );
     }
   }
@@ -96,7 +97,7 @@ export class SessionService {
    */
   async deleteSession(sessionId: string) {
     // Remove from Redis
-    await this.redis.client.del(`${this.sessionPrefix}${sessionId}`);
+    await this.redis.del(`${this.sessionPrefix}${sessionId}`);
     
     // Update database record
     await this.prisma.session.update({
@@ -116,7 +117,7 @@ export class SessionService {
     
     // Delete each session from Redis
     for (const session of sessions) {
-      await this.redis.client.del(`${this.sessionPrefix}${session.id}`);
+      await this.redis.del(`${this.sessionPrefix}${session.id}`);
     }
     
     // Update all session records in database

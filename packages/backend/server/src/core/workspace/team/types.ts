@@ -40,31 +40,19 @@ export class Team {
   color?: string;
 }
 
-@InputType()
-export class CreateTeamInput {
-  @Field(() => String)
-  workspaceId: string;
+@ObjectType()
+export class User {
+  @Field(() => ID)
+  id: string;
 
   @Field(() => String)
-  name: string;
+  email: string;
 
-  @Field(() => String, { nullable: true })
-  description?: string;
-
-  @Field(() => String, { nullable: true })
-  color?: string;
-}
-
-@InputType()
-export class UpdateTeamInput {
   @Field(() => String, { nullable: true })
   name?: string;
 
   @Field(() => String, { nullable: true })
-  description?: string;
-
-  @Field(() => String, { nullable: true })
-  color?: string;
+  avatarUrl?: string;
 }
 
 @ObjectType()
@@ -97,19 +85,31 @@ export class TeamMember {
   user?: User;
 }
 
-@ObjectType()
-export class User {
-  @Field(() => ID)
-  id: string;
+@InputType()
+export class CreateTeamInput {
+  @Field(() => String)
+  workspaceId: string;
 
   @Field(() => String)
-  email: string;
+  name: string;
 
+  @Field(() => String, { nullable: true })
+  description?: string;
+
+  @Field(() => String, { nullable: true })
+  color?: string;
+}
+
+@InputType()
+export class UpdateTeamInput {
   @Field(() => String, { nullable: true })
   name?: string;
 
   @Field(() => String, { nullable: true })
-  avatarUrl?: string;
+  description?: string;
+
+  @Field(() => String, { nullable: true })
+  color?: string;
 }
 
 @InputType()

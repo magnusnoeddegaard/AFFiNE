@@ -321,7 +321,7 @@ export class AIController {
     
     // Find the last assistant message
     const messages = session.messages || [];
-    const lastAssistantIndex = messages.findLastIndex(msg => msg.role === 'assistant');
+    const lastAssistantIndex = messages.findLastIndex((msg: { role: string; content: string; createdAt: string }) => msg.role === 'assistant');
     
     if (lastAssistantIndex === -1) {
       throw new Error('No assistant message to retry');
@@ -456,12 +456,12 @@ export class AIController {
       const initialState = {
         messages: [
           {
-            role: 'system',
+            role: 'system' as const,
             content: 'You are a helpful assistant that provides inline suggestions to continue text.',
             createdAt: new Date().toISOString()
           },
           {
-            role: 'user',
+            role: 'user' as const,
             content: `Continue this text: ${suggestionDto.text}`,
             createdAt: new Date().toISOString()
           }
@@ -525,12 +525,12 @@ export class AIController {
       const initialState = {
         messages: [
           {
-            role: 'system',
+            role: 'system' as const,
             content: systemPrompt,
             createdAt: new Date().toISOString()
           },
           {
-            role: 'user',
+            role: 'user' as const,
             content: `${actionId}: ${actionDto.selection}`,
             createdAt: new Date().toISOString()
           }

@@ -1,23 +1,17 @@
+import { Inject, Injectable } from '@nestjs/common';
 import { Document, GraphState, SearchOptions, SearchResult } from '../types';
-
-/**
- * Interface for embedding service
- */
-export interface EmbeddingService {
-  createEmbedding(text: string): Promise<number[]>;
-  computeSimilarity(embedding1: number[], embedding2: number[]): number;
-}
+import { IEmbeddingService, EMBEDDING_SERVICE } from './embedding-service';
 
 /**
  * Class for managing context and semantic search
  */
+@Injectable()
 export class ContextService {
-  private embeddingService: EmbeddingService;
   private documents: Map<string, Document & { embedding?: number[] }> = new Map();
 
-  constructor(embeddingService: EmbeddingService) {
-    this.embeddingService = embeddingService;
-  }
+  constructor(
+    @Inject(EMBEDDING_SERVICE) private readonly embeddingService: IEmbeddingService
+  ) {}
 
   /**
    * Add content to the context

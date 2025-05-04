@@ -5,22 +5,25 @@ import { ConfigService as NestConfigService } from '@nestjs/config';
 export class ConfigService {
   constructor(private configService: NestConfigService) {}
 
-  get<T>(key: string, defaultValue?: T): T {
-    return this.configService.get<T>(key, defaultValue);
+  // Single implementation that works for all cases
+  get<T>(key: string, defaultValue?: T): T | undefined {
+    const value = this.configService.get<T>(key);
+    return value !== undefined ? value : defaultValue;
   }
 
   getNumber(key: string, defaultValue?: number): number {
-    const value = this.get<string | undefined>(key, defaultValue?.toString());
+    const value = this.get<string>(key);
     return value ? Number(value) : (defaultValue ?? 0);
   }
 
   getBoolean(key: string, defaultValue?: boolean): boolean {
-    const value = this.get<string | undefined>(key, defaultValue?.toString());
+    const value = this.get<string>(key);
     return value ? value.toLowerCase() === 'true' : !!defaultValue;
   }
 
   getString(key: string, defaultValue?: string): string {
-    return this.get<string>(key, defaultValue) ?? '';
+    const value = this.get<string>(key);
+    return value ?? defaultValue ?? '';
   }
 
   getRequired<T>(key: string): T {

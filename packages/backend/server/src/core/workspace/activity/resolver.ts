@@ -3,7 +3,7 @@ import { UseGuards } from '@nestjs/common';
 import { WorkspaceActivityService } from './service';
 import { PermissionService } from '../../permission/service';
 import { ActivityType, GetWorkspaceActivitiesInput, WorkspaceActivity } from '../types';
-import { AuthGuard } from '../../auth/guard';
+import { JwtAuthGuard } from '../../auth/guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { PermissionLevel, ResourceType } from '../../permission/types';
 
@@ -15,7 +15,7 @@ export class WorkspaceActivityResolver {
   ) {}
 
   @Query(() => [WorkspaceActivity])
-  @UseGuards(AuthGuard)
+  @UseGuards(JwtAuthGuard)
   async workspaceActivities(
     @Args('input') input: GetWorkspaceActivitiesInput,
     @CurrentUser() userId: string,
@@ -32,7 +32,7 @@ export class WorkspaceActivityResolver {
   }
 
   @Query(() => [WorkspaceActivity])
-  @UseGuards(AuthGuard)
+  @UseGuards(JwtAuthGuard)
   async userRecentActivities(
     @Args('limit', { type: () => Int, nullable: true }) limit: number,
     @CurrentUser() userId: string,
@@ -41,7 +41,7 @@ export class WorkspaceActivityResolver {
   }
 
   @Query(() => Object)
-  @UseGuards(AuthGuard)
+  @UseGuards(JwtAuthGuard)
   async workspaceActivityCounts(
     @Args('workspaceId') workspaceId: string,
     @Args('startDate', { nullable: true }) startDate: Date,

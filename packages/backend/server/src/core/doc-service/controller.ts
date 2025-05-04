@@ -10,8 +10,9 @@ import {
 import { Args } from '@nestjs/graphql';
 import type { Response } from 'express';
 
-import { NotFound, SkipThrottle } from '../../base';
-import { Internal } from '../auth';
+import { NotFoundError } from '../../base/error/app.errors';
+import { SkipThrottle } from '@nestjs/throttler';
+import { Internal } from '../auth/decorators/decorator';
 import { DatabaseDocReader } from '../doc';
 
 @Controller('/rpc')
@@ -30,7 +31,7 @@ export class DocRpcController {
   ) {
     const doc = await this.docReader.getDoc(workspaceId, docId);
     if (!doc) {
-      throw new NotFound('Doc not found');
+      throw new NotFoundError('Doc not found');
     }
     this.logger.debug(
       `get doc ${docId} from workspace ${workspaceId}, size: ${doc.bin.length}`
@@ -57,7 +58,7 @@ export class DocRpcController {
       stateVector
     );
     if (!diff) {
-      throw new NotFound('Doc not found');
+      throw new NotFoundError('Doc not found');
     }
     this.logger.debug(
       `get doc diff ${docId} from workspace ${workspaceId}, missing size: ${diff.missing.length}, old state size: ${stateVector?.length}, new state size: ${diff.state.length}`
@@ -84,7 +85,7 @@ export class DocRpcController {
       ? await this.docReader.getFullDocContent(workspaceId, docId)
       : await this.docReader.getDocContent(workspaceId, docId);
     if (!content) {
-      throw new NotFound('Doc not found');
+      throw new NotFoundError('Doc not found');
     }
     this.logger.debug(`get doc content ${docId} from workspace ${workspaceId}`);
     return content;
@@ -96,7 +97,7 @@ export class DocRpcController {
   async getWorkspaceContent(@Param('workspaceId') workspaceId: string) {
     const content = await this.docReader.getWorkspaceContent(workspaceId);
     if (!content) {
-      throw new NotFound('Workspace not found');
+      throw new NotFoundError('Workspace not found');
     }
     this.logger.debug(`get workspace content ${workspaceId}`);
     return content;

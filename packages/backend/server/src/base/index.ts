@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from './config';
 import { PrismaModule } from './prisma';
 import { RedisModule } from './redis';
-import { GraphQLConfigModule } from './graphql';
+import { GraphQLConfigModule } from './graphql/graphql-config.module';
 import { LoggerModule } from './logger';
 import { MetricsModule } from './metrics';
 import { StorageModule } from './storage';

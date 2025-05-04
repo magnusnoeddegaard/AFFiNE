@@ -105,7 +105,7 @@ export class GraphExecutor {
       } else {
         // If no next node from the node, check graph edges
         const nextIds = this.getNextNodeIds(currentNodeId, state);
-        currentNodeId = nextIds.length > 0 ? nextIds[0] : null;
+        currentNodeId = nextIds.length > 0 ? nextIds[0] : '';
       }
       
       // Update the state with the new current node
@@ -156,7 +156,7 @@ export class GraphExecutor {
       } else {
         // If no next node from the node, check graph edges
         const nextIds = this.getNextNodeIds(currentNodeId, state);
-        currentNodeId = nextIds.length > 0 ? nextIds[0] : null;
+        currentNodeId = nextIds.length > 0 ? nextIds[0] : '';
       }
       
       // Update the state with the new current node

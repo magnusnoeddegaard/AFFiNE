@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+
 import { PrismaService } from '../base/prisma';
 import { BaseModel } from './base';
 import { Team, TeamSettings, WorkspaceUserRole } from './common';
@@ -25,7 +26,7 @@ export class TeamModel extends BaseModel<Team> {
    * @returns The created team
    */
   async createWithSettings(
-    data: Omit<Team, 'id' | 'createdAt' | 'updatedAt' | 'settings'>,
+    data: Omit<Team, 'id' | 'createdAt' | 'updatedAt' | 'settings'>
   ): Promise<Team> {
     const defaultSettings: TeamSettings = {
       color: null,
@@ -35,7 +36,7 @@ export class TeamModel extends BaseModel<Team> {
         privateChat: true,
       },
     };
-    
+
     return this.create({
       ...data,
       settings: defaultSettings,
@@ -50,14 +51,14 @@ export class TeamModel extends BaseModel<Team> {
    */
   async updateSettings(
     id: string,
-    settings: Partial<TeamSettings>,
+    settings: Partial<TeamSettings>
   ): Promise<Team> {
     const team = await this.findById(id);
-    
+
     if (!team) {
       throw new Error(`Team not found: ${id}`);
     }
-    
+
     return this.update(id, {
       settings: {
         ...team.settings,
@@ -82,11 +83,11 @@ export class TeamModel extends BaseModel<Team> {
    * @param options Query options
    * @returns The teams
    */
-  async findByWorkspace(workspaceId: string, options: any = {}): Promise<Team[]> {
-    return this.findMany(
-      { workspaceId },
-      options,
-    );
+  async findByWorkspace(
+    workspaceId: string,
+    options: any = {}
+  ): Promise<Team[]> {
+    return this.findMany({ workspaceId }, options);
   }
 
   /**
@@ -100,10 +101,10 @@ export class TeamModel extends BaseModel<Team> {
       where: { userId },
       select: { teamId: true },
     });
-    
+
     return this.findMany(
-      { id: { in: teamIds.map(t => t.teamId) } },
-      options,
+      { id: { in: teamIds.map((t: { teamId: string }) => t.teamId) } },
+      options
     );
   }
 }

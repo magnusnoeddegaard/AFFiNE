@@ -17,14 +17,14 @@ export class EmbeddingProcessor {
    * Process document embedding jobs
    */
   @Process('process-document')
-  async processDocumentEmbedding(job: Job<{ documentId: string }>) {
+  async processDocumentEmbedding(job: Job<{ documentId: string; userId: string; workspaceId: string }>) {
     try {
       this.logger.debug(
         `Processing document embedding job ${job.id} for document ${job.data.documentId}`
       );
       
       // Call the service to perform the embedding
-      await this.documentEmbeddingService.processDocumentEmbedding(job.data.documentId);
+      await this.documentEmbeddingService.processDocumentEmbedding(job.data);
       
       this.logger.debug(
         `Successfully completed document embedding job ${job.id} for document ${job.data.documentId}`

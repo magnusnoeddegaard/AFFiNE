@@ -47,7 +47,7 @@ export class OpenAIAgent extends BaseAgent<OpenAIAgentConfig> {
     this.provider = new OpenAIProvider({
       apiKey: config.apiKey,
       baseUrl: config.baseUrl,
-      model: config.model,
+      model: config.model || 'gpt-4o', // Ensure model is never undefined
       temperature: config.temperature,
       maxTokens: config.maxTokens,
       topP: config.topP,

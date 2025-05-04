@@ -150,7 +150,3 @@ async function processBatch(batchId: string) {
   );
 }
 ```
-
-## License
-
-This project is licensed under the [MIT License](LICENSE).

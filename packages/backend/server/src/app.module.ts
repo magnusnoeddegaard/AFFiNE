@@ -1,8 +1,8 @@
+// In app.module.ts, replace the GraphQL configuration with:
+
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { GraphQLModule } from '@nestjs/graphql';
-import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
-import { join } from 'path';
+import { GraphQLConfigModule } from './base/graphql/graphql-config.module';
 import { BaseModule } from './base';
 import { CoreModule } from './core';
 import { PluginsModule } from './plugins';
@@ -15,15 +15,8 @@ import { PluginsModule } from './plugins';
       envFilePath: ['.env.local', '.env'],
     }),
     
-    // GraphQL configuration
-    GraphQLModule.forRoot<ApolloDriverConfig>({
-      driver: ApolloDriver,
-      autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
-      sortSchema: true,
-      playground: process.env.GRAPHQL_PLAYGROUND === 'true',
-      debug: process.env.GRAPHQL_DEBUG === 'true',
-      context: ({ req }) => ({ req }),
-    }),
+    // GraphQL configuration - now using the dedicated module
+    GraphQLConfigModule,
     
     // Import base module with core infrastructure
     BaseModule,

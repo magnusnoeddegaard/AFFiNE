@@ -1,11 +1,19 @@
 import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { DocumentHistoryService } from './history.service';
-import { UseGuards } from '@nestjs/common';
+import { UseGuards, createParamDecorator, ExecutionContext } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guard';
-import { CurrentUser } from '../auth/decorator';
-import { DocumentPermissionGuard } from '../permission/guards/document-permission.guard';
-import { RequiredPermission } from '../permission/decorators/required-permission.decorator';
+import { WsDocumentPermissionGuard as DocumentPermissionGuard } from '../permission/guards/ws-document-permission.guard';
+import { WsRequiredPermission as RequiredPermission } from '../permission/decorators/ws-required-permission.decorator';
 import { DocumentPermission } from '../../models/common';
+import { GqlExecutionContext } from '@nestjs/graphql';
+
+// Create a CurrentUser decorator for GraphQL context
+export const CurrentUser = createParamDecorator(
+  (data: unknown, context: ExecutionContext) => {
+    const ctx = GqlExecutionContext.create(context);
+    return ctx.getContext().req.user;
+  },
+);
 
 @Resolver('DocumentHistory')
 export class DocumentHistoryResolver {

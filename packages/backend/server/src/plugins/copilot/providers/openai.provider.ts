@@ -1,8 +1,75 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { LLMProvider } from './provider.interface';
-import { OpenAI } from 'openai';
 import { Readable } from 'stream';
+import { OpenAI } from 'openai';
+import { ChatCompletionMessageParam, ChatCompletionUserMessageParam, ChatCompletionSystemMessageParam, ChatCompletionAssistantMessageParam, ChatCompletionFunctionMessageParam, ChatCompletionToolMessageParam } from 'openai/resources/chat/completions';
+import { MessageWithToolSupport } from './provider.interface';
+
+/**
+ * Interface for LLM providers
+ */
+export interface LLMProvider {
+  readonly id: string;
+  readonly name: string;
+  readonly capabilities: string[];
+  readonly models: Record<string, Array<{ id: string; name: string }>>;
+  
+  generateText(prompt: string, options?: TextGenerationOptions): Promise<string>;
+  generateTextStream?(prompt: string, options?: TextGenerationOptions): Promise<ReadableStream<string>>;
+  embedText?(text: string, model?: string): Promise<number[]>;
+  generateImage?(prompt: string, options?: ImageGenerationOptions): Promise<ImageGenerationResult>;
+  analyzeImage?(imageUrl: string, prompt: string, options?: ImageAnalysisOptions): Promise<string>;
+  transcribeAudio?(audioFile: Buffer | Readable, options?: TranscriptionOptions): Promise<TranscriptionResult>;
+}
+
+/**
+ * Common types for LLM providers
+ */
+export interface TextGenerationOptions {
+  model?: string;
+  systemPrompt?: string;
+  previousMessages?: Array<MessageWithToolSupport>;
+  temperature?: number;
+  maxTokens?: number;
+  topP?: number;
+  presencePenalty?: number;
+  frequencyPenalty?: number;
+}
+
+export interface ImageGenerationOptions {
+  model?: string;
+  size?: string;
+  quality?: string;
+  style?: string;
+}
+
+export interface ImageGenerationResult {
+  url: string;
+  promptId: string;
+}
+
+export interface ImageAnalysisOptions {
+  model?: string;
+  maxTokens?: number;
+}
+
+export interface TranscriptionOptions {
+  model?: string;
+  language?: string;
+  prompt?: string;
+}
+
+export interface TranscriptionResult {
+  text: string;
+  segments: Array<{
+    id: number;
+    start: number;
+    end: number;
+    text: string;
+  }>;
+  language?: string;
+  durationInSeconds: number;
+}
 
 /**
  * OpenAI provider implementation
@@ -72,13 +139,87 @@ export class OpenAIProvider implements LLMProvider {
       
       const system = options?.systemPrompt || 'You are a helpful assistant.';
       
+      // Convert previous messages to the proper type
+      const formattedMessages: ChatCompletionMessageParam[] = [];
+      
+      // Add system message
+      formattedMessages.push({
+        role: 'system',
+        content: system
+      } as ChatCompletionSystemMessageParam);
+      
+      // Add previous messages with proper typing
+      if (options?.previousMessages && options.previousMessages.length > 0) {
+        for (const msg of options.previousMessages) {
+          switch (msg.role) {
+            case 'system':
+              formattedMessages.push({
+                role: 'system',
+                content: msg.content
+              } as ChatCompletionSystemMessageParam);
+              break;
+            case 'user':
+              formattedMessages.push({
+                role: 'user',
+                content: msg.content
+              } as ChatCompletionUserMessageParam);
+              break;
+            case 'assistant':
+              formattedMessages.push({
+                role: 'assistant',
+                content: msg.content
+              } as ChatCompletionAssistantMessageParam);
+              break;
+            case 'function':
+              if (msg.name) {
+                formattedMessages.push({
+                  role: 'function',
+                  content: msg.content,
+                  name: msg.name
+                } as ChatCompletionFunctionMessageParam);
+              } else {
+                this.logger.warn('Function message missing required name property, skipping');
+              }
+              break;
+            case 'tool':
+              if (msg.name) {
+                // Tool messages require both name and tool_call_id
+                if (!msg.tool_call_id) {
+                  this.logger.warn('Tool message missing required tool_call_id property, treating as user message');
+                  formattedMessages.push({
+                    role: 'user',
+                    content: msg.content
+                  } as ChatCompletionUserMessageParam);
+                } else {
+                  formattedMessages.push({
+                    role: 'tool',
+                    content: msg.content,
+                    tool_call_id: msg.tool_call_id
+                  } as ChatCompletionToolMessageParam);
+                }
+              } else {
+                this.logger.warn('Tool message missing required name property, skipping');
+              }
+              break;
+            default:
+              this.logger.warn(`Unknown message role: ${msg.role}, treating as user message`);
+              formattedMessages.push({
+                role: 'user',
+                content: msg.content
+              } as ChatCompletionUserMessageParam);
+          }
+        }
+      }
+      
+      // Add the current prompt as user message
+      formattedMessages.push({
+        role: 'user',
+        content: prompt
+      } as ChatCompletionUserMessageParam);
+      
       const response = await this.client.chat.completions.create({
         model,
-        messages: [
-          { role: 'system', content: system },
-          ...options?.previousMessages || [],
-          { role: 'user', content: prompt },
-        ],
+        messages: formattedMessages,
         temperature,
         max_tokens: maxTokens,
         top_p: options?.topP || 1,
@@ -107,13 +248,87 @@ export class OpenAIProvider implements LLMProvider {
       
       const system = options?.systemPrompt || 'You are a helpful assistant.';
       
+      // Convert previous messages to the proper type
+      const formattedMessages: ChatCompletionMessageParam[] = [];
+      
+      // Add system message
+      formattedMessages.push({
+        role: 'system',
+        content: system
+      } as ChatCompletionSystemMessageParam);
+      
+      // Add previous messages with proper typing
+      if (options?.previousMessages && options.previousMessages.length > 0) {
+        for (const msg of options.previousMessages) {
+          switch (msg.role) {
+            case 'system':
+              formattedMessages.push({
+                role: 'system',
+                content: msg.content
+              } as ChatCompletionSystemMessageParam);
+              break;
+            case 'user':
+              formattedMessages.push({
+                role: 'user',
+                content: msg.content
+              } as ChatCompletionUserMessageParam);
+              break;
+            case 'assistant':
+              formattedMessages.push({
+                role: 'assistant',
+                content: msg.content
+              } as ChatCompletionAssistantMessageParam);
+              break;
+            case 'function':
+              if (msg.name) {
+                formattedMessages.push({
+                  role: 'function',
+                  content: msg.content,
+                  name: msg.name
+                } as ChatCompletionFunctionMessageParam);
+              } else {
+                this.logger.warn('Function message missing required name property, skipping');
+              }
+              break;
+            case 'tool':
+              if (msg.name) {
+                // Tool messages require both name and tool_call_id
+                if (!msg.tool_call_id) {
+                  this.logger.warn('Tool message missing required tool_call_id property, treating as user message');
+                  formattedMessages.push({
+                    role: 'user',
+                    content: msg.content
+                  } as ChatCompletionUserMessageParam);
+                } else {
+                  formattedMessages.push({
+                    role: 'tool',
+                    content: msg.content,
+                    tool_call_id: msg.tool_call_id
+                  } as ChatCompletionToolMessageParam);
+                }
+              } else {
+                this.logger.warn('Tool message missing required name property, skipping');
+              }
+              break;
+            default:
+              this.logger.warn(`Unknown message role: ${msg.role}, treating as user message`);
+              formattedMessages.push({
+                role: 'user',
+                content: msg.content
+              } as ChatCompletionUserMessageParam);
+          }
+        }
+      }
+      
+      // Add the current prompt as user message
+      formattedMessages.push({
+        role: 'user',
+        content: prompt
+      } as ChatCompletionUserMessageParam);
+      
       const stream = await this.client.chat.completions.create({
         model,
-        messages: [
-          { role: 'system', content: system },
-          ...options?.previousMessages || [],
-          { role: 'user', content: prompt },
-        ],
+        messages: formattedMessages,
         temperature,
         max_tokens: maxTokens,
         top_p: options?.topP || 1,
@@ -294,7 +509,7 @@ export class OpenAIProvider implements LLMProvider {
         text: response.text,
         segments,
         language: response.language,
-        durationInSeconds: response.duration,
+        durationInSeconds: parseFloat(response.duration), // Convert string to number
       };
     } catch (error) {
       this.logger.error(`Error transcribing audio: ${error.message}`, error.stack);
@@ -309,50 +524,4 @@ export class OpenAIProvider implements LLMProvider {
 export interface OpenAIProviderConfig {
   apiKey?: string;
   organization?: string;
-}
-
-export interface TextGenerationOptions {
-  model?: string;
-  systemPrompt?: string;
-  previousMessages?: Array<{ role: string; content: string }>;
-  temperature?: number;
-  maxTokens?: number;
-  topP?: number;
-  presencePenalty?: number;
-  frequencyPenalty?: number;
-}
-
-export interface ImageGenerationOptions {
-  model?: string;
-  size?: string;
-  quality?: string;
-  style?: string;
-}
-
-export interface ImageGenerationResult {
-  url: string;
-  promptId: string;
-}
-
-export interface ImageAnalysisOptions {
-  model?: string;
-  maxTokens?: number;
-}
-
-export interface TranscriptionOptions {
-  model?: string;
-  language?: string;
-  prompt?: string;
-}
-
-export interface TranscriptionResult {
-  text: string;
-  segments: Array<{
-    id: number;
-    start: number;
-    end: number;
-    text: string;
-  }>;
-  language?: string;
-  durationInSeconds?: number;
 }

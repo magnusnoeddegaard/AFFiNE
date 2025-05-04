@@ -1,10 +1,11 @@
 import { CanActivate, ExecutionContext, Injectable, Logger } from '@nestjs/common';
 import { WsException } from '@nestjs/websockets';
 import { PermissionService } from '../service';
-import { ResourceType } from '../../../models/common';
+import { ResourceType } from '../types';
 import { Reflector } from '@nestjs/core';
 import { WS_REQUIRED_PERMISSION_KEY } from '../decorators/ws-required-permission.decorator';
 import { Socket } from 'socket.io';
+import { PermissionLevel } from '../types';
 
 /**
  * Guard for WebSocket connections to check document permissions
@@ -50,12 +51,16 @@ export class WsDocumentPermissionGuard implements CanActivate {
     }
     
     try {
+      // Convert string permission to PermissionLevel enum
+      const permissionLevel = requiredPermission as PermissionLevel;
+      
       // Check if the user has the required permission
+      // Fix the order of arguments: resourceId, resourceType, userId, requiredLevel
       const hasPermission = await this.permissionService.hasPermission(
-        ResourceType.DOCUMENT,
         documentId,
+        ResourceType.DOCUMENT,
         user.id,
-        requiredPermission,
+        permissionLevel,
       );
       
       if (!hasPermission) {

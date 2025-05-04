@@ -9,6 +9,7 @@ import {
   Req,
   UnauthorizedException
 } from '@nestjs/common';
+import { Request } from 'express';
 import { AuthService } from './service';
 import { SessionService } from './session';
 import { JwtAuthGuard } from './guard';
@@ -62,7 +63,7 @@ export class AuthController {
   @Post('sign-out')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  async signOut(@Req() req, @Body() body: { sessionId?: string }) {
+  async signOut(@Req() req: Request, @Body() body: { sessionId?: string }) {
     const { sessionId } = body;
     const userId = req.user.id;
     
@@ -79,7 +80,7 @@ export class AuthController {
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
-  async getProfile(@Req() req) {
+  async getProfile(@Req() req: Request) {
     // The user is already attached to the request by the JwtAuthGuard
     return req.user;
   }

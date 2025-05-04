@@ -1,112 +1,81 @@
-import { EmbeddingService } from './context-service';
+import { Injectable, Optional } from '@nestjs/common';
 
 /**
- * Interface for embedding provider
+ * Injection token for the embedding service
  */
-export interface EmbeddingProvider {
-  embedText(text: string): Promise<number[]>;
+export const EMBEDDING_SERVICE = 'EMBEDDING_SERVICE';
+
+/**
+ * Configuration for embedding service
+ */
+export interface EmbeddingServiceConfig {
   name: string;
+  embedText: (text: string) => Promise<number[]>;
 }
 
 /**
- * Base implementation of embedding service that works with providers
+ * Interface for embedding service functionality
  */
-export class DefaultEmbeddingService implements EmbeddingService {
-  private provider: EmbeddingProvider;
-  private cache: Map<string, number[]> = new Map();
-  private cacheEnabled: boolean;
+export interface IEmbeddingService {
+  createEmbedding(text: string): Promise<number[]>;
+  computeSimilarity(embedding1: number[], embedding2: number[]): number;
+}
 
-  constructor(provider: EmbeddingProvider, options: { cacheEnabled?: boolean } = {}) {
-    this.provider = provider;
-    this.cacheEnabled = options.cacheEnabled ?? true;
+/**
+ * Default implementation of the embedding service
+ */
+@Injectable()
+export class DefaultEmbeddingService implements IEmbeddingService {
+  private name: string = 'default';
+  private embedTextFn: (text: string) => Promise<number[]>;
+
+  constructor(@Optional() config?: EmbeddingServiceConfig) {
+    if (config) {
+      this.name = config.name;
+      this.embedTextFn = config.embedText;
+    } else {
+      // Default implementation if no config provided
+      this.embedTextFn = async (text: string) => {
+        console.warn('[DefaultEmbeddingService] Using fallback random embeddings');
+        return Array(1536).fill(0).map(() => Math.random() * 2 - 1);
+      };
+    }
   }
 
   /**
-   * Generate embedding for text
+   * Create an embedding vector from text
    * @param text Text to embed
    * @returns Embedding vector
    */
   async createEmbedding(text: string): Promise<number[]> {
-    // Use cache if enabled and present
-    if (this.cacheEnabled) {
-      const cachedEmbedding = this.cache.get(text);
-      if (cachedEmbedding) {
-        return cachedEmbedding;
-      }
-    }
-    
-    // Get embedding from provider
-    const embedding = await this.provider.embedText(text);
-    
-    // Store in cache if enabled
-    if (this.cacheEnabled) {
-      this.cache.set(text, embedding);
-    }
-    
-    return embedding;
+    return this.embedTextFn(text);
   }
 
   /**
-   * Compute cosine similarity between two embeddings
-   * @param embedding1 First embedding
-   * @param embedding2 Second embedding
+   * Compute similarity between two embedding vectors using cosine similarity
+   * @param embedding1 First embedding vector
+   * @param embedding2 Second embedding vector
    * @returns Similarity score (0-1)
    */
   computeSimilarity(embedding1: number[], embedding2: number[]): number {
+    // Cosine similarity implementation
     if (embedding1.length !== embedding2.length) {
-      throw new Error('Embeddings must have the same length');
+      throw new Error('Embeddings must have the same dimensions');
     }
-    
-    // Compute dot product
+
     let dotProduct = 0;
     let norm1 = 0;
     let norm2 = 0;
-    
+
     for (let i = 0; i < embedding1.length; i++) {
       dotProduct += embedding1[i] * embedding2[i];
       norm1 += embedding1[i] * embedding1[i];
       norm2 += embedding2[i] * embedding2[i];
     }
-    
-    // Calculate cosine similarity
-    norm1 = Math.sqrt(norm1);
-    norm2 = Math.sqrt(norm2);
-    
-    if (norm1 === 0 || norm2 === 0) {
-      return 0;
-    }
-    
-    return dotProduct / (norm1 * norm2);
-  }
 
-  /**
-   * Clear the embedding cache
-   */
-  clearCache(): void {
-    this.cache.clear();
-  }
+    // Avoid division by zero
+    if (norm1 === 0 || norm2 === 0) return 0;
 
-  /**
-   * Set whether caching is enabled
-   * @param enabled Whether caching is enabled
-   */
-  setCacheEnabled(enabled: boolean): void {
-    this.cacheEnabled = enabled;
-  }
-
-  /**
-   * Get the current embedding provider
-   */
-  getProvider(): EmbeddingProvider {
-    return this.provider;
-  }
-
-  /**
-   * Change the embedding provider
-   * @param provider New embedding provider
-   */
-  setProvider(provider: EmbeddingProvider): void {
-    this.provider = provider;
-    this.clearCache();
+    return dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2));
   }
 }

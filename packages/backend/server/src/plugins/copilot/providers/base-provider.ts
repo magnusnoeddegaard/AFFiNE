@@ -34,14 +34,17 @@ export interface LLMProvider {
   readonly defaultModel: string;
   readonly supportsStreaming: boolean;
   readonly supportsTools: boolean;
-  
+
   /**
    * Generate a text completion from the LLM
    * @param messages The messages to process
    * @param options Configuration options for this request
    */
-  complete(messages: Message[], options?: Partial<LLMProviderConfig>): Promise<LLMResponse>;
-  
+  complete(
+    messages: Message[],
+    options?: Partial<LLMProviderConfig>
+  ): Promise<LLMResponse>;
+
   /**
    * Generate a streaming text completion from the LLM
    * @param messages The messages to process
@@ -51,21 +54,27 @@ export interface LLMProvider {
     messages: Message[],
     options?: Partial<LLMProviderConfig>
   ): AsyncIterable<LLMResponse>;
-  
+
   /**
    * Create embeddings for text input
    * @param text The text to create embeddings for
    * @param options Configuration options for this request
    */
-  createEmbedding?(text: string, options?: Partial<LLMProviderConfig>): Promise<number[]>;
-  
+  createEmbedding?(
+    text: string,
+    options?: Partial<LLMProviderConfig>
+  ): Promise<number[]>;
+
   /**
    * Generate an image from text input
    * @param prompt The text prompt to generate an image from
    * @param options Configuration options for this request
    */
-  generateImage?(prompt: string, options?: Partial<LLMProviderConfig>): Promise<string>;
-  
+  generateImage?(
+    prompt: string,
+    options?: Partial<LLMProviderConfig>
+  ): Promise<string>;
+
   /**
    * Analyze an image and generate text description/response
    * @param imageUrl URL or base64 of the image
@@ -89,20 +98,29 @@ export abstract class BaseLLMProvider implements LLMProvider {
   readonly supportsStreaming: boolean;
   readonly supportsTools: boolean;
   protected config: LLMProviderConfig;
-  
-  constructor(name: string, defaultModel: string, config: LLMProviderConfig) {
+
+  constructor(
+    name: string,
+    defaultModel: string,
+    config: LLMProviderConfig,
+    supportsStreaming: boolean = false,
+    supportsTools: boolean = false
+  ) {
     this.name = name;
     this.defaultModel = defaultModel;
-    this.supportsStreaming = false;
-    this.supportsTools = false;
+    this.supportsStreaming = supportsStreaming;
+    this.supportsTools = supportsTools;
     this.config = config;
   }
-  
+
   /**
    * Abstract method to be implemented by concrete provider classes
    */
-  abstract complete(messages: Message[], options?: Partial<LLMProviderConfig>): Promise<LLMResponse>;
-  
+  abstract complete(
+    messages: Message[],
+    options?: Partial<LLMProviderConfig>
+  ): Promise<LLMResponse>;
+
   /**
    * Helper method to format messages for the LLM provider
    * Can be overridden by specific providers if needed
@@ -112,11 +130,13 @@ export abstract class BaseLLMProvider implements LLMProvider {
     // Specific providers may need to transform the messages
     return messages;
   }
-  
+
   /**
    * Helper method to prepare configuration for this request
    */
-  protected prepareConfig(options?: Partial<LLMProviderConfig>): LLMProviderConfig {
+  protected prepareConfig(
+    options?: Partial<LLMProviderConfig>
+  ): LLMProviderConfig {
     return {
       ...this.config,
       ...options,

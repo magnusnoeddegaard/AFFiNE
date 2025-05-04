@@ -85,7 +85,7 @@ export class DocumentHistoryService {
     userId: string,
   ): Promise<DocumentContent | null> {
     // Use mutex to prevent race conditions during restore
-    return this.mutexService.withMutex(
+    return this.mutexService.withLock(
       `document:${documentId}:restore`,
       () => this.historyModel.restoreVersion(
         documentId,
@@ -134,7 +134,7 @@ export class DocumentHistoryService {
     message: string,
   ): Promise<DocumentHistory | null> {
     // Use mutex to prevent race conditions
-    return this.mutexService.withMutex(
+    return this.mutexService.withLock(
       `document:${documentId}:snapshot`,
       async () => {
         const document = await this.documentModel.getWithContent(documentId);

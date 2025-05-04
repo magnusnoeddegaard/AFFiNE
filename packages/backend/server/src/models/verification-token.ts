@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+
 import { PrismaService } from '../base/prisma';
 import { BaseModel } from './base';
 import { Timestamps } from './common';
@@ -68,18 +69,20 @@ export class VerificationTokenModel extends BaseModel<VerificationToken> {
     userId: string,
     email: string,
     expiresInHours: number = 24,
-    data: Record<string, any> = {},
+    data: Record<string, any> = {}
   ): Promise<VerificationToken> {
     // Generate a random token
-    const token = Buffer.from(Math.random().toString(36) + Date.now().toString(36))
+    const token = Buffer.from(
+      Math.random().toString(36) + Date.now().toString(36)
+    )
       .toString('base64')
       .replace(/[^a-zA-Z0-9]/g, '')
       .substring(0, 32);
-    
+
     // Calculate expiration date
     const expires = new Date();
     expires.setHours(expires.getHours() + expiresInHours);
-    
+
     return this.create({
       token,
       type,
@@ -99,21 +102,21 @@ export class VerificationTokenModel extends BaseModel<VerificationToken> {
    */
   async validateAndUseToken(token: string): Promise<VerificationToken | null> {
     const verificationToken = await this.findByToken(token);
-    
+
     if (!verificationToken) {
       return null;
     }
-    
+
     // Check if the token is expired
     if (verificationToken.expires < new Date()) {
       return null;
     }
-    
+
     // Check if the token is already used
     if (verificationToken.used) {
       return null;
     }
-    
+
     // Mark the token as used
     return this.update(verificationToken.id, {
       used: true,
@@ -128,21 +131,21 @@ export class VerificationTokenModel extends BaseModel<VerificationToken> {
    */
   async isTokenValid(token: string): Promise<boolean> {
     const verificationToken = await this.findByToken(token);
-    
+
     if (!verificationToken) {
       return false;
     }
-    
+
     // Check if the token is expired
     if (verificationToken.expires < new Date()) {
       return false;
     }
-    
+
     // Check if the token is already used
     if (verificationToken.used) {
       return false;
     }
-    
+
     return true;
   }
 
@@ -153,13 +156,10 @@ export class VerificationTokenModel extends BaseModel<VerificationToken> {
   async deleteExpiredTokens(): Promise<number> {
     const result = await this.prisma.verificationToken.deleteMany({
       where: {
-        OR: [
-          { expires: { lt: new Date() } },
-          { used: true },
-        ],
+        OR: [{ expires: { lt: new Date() } }, { used: true }],
       },
     });
-    
+
     return result.count;
   }
 
@@ -171,7 +171,7 @@ export class VerificationTokenModel extends BaseModel<VerificationToken> {
    */
   async findActiveByUserAndType(
     userId: string,
-    type: VerificationTokenType,
+    type: VerificationTokenType
   ): Promise<VerificationToken[]> {
     return this.model.findMany({
       where: {
@@ -192,7 +192,7 @@ export class VerificationTokenModel extends BaseModel<VerificationToken> {
    */
   async invalidateTokens(
     userId: string,
-    type: VerificationTokenType,
+    type: VerificationTokenType
   ): Promise<number> {
     const result = await this.prisma.verificationToken.updateMany({
       where: {
@@ -206,7 +206,19 @@ export class VerificationTokenModel extends BaseModel<VerificationToken> {
         usedAt: new Date(),
       },
     });
-    
+
     return result.count;
+  }
+
+  /**
+   * Mark a token as used
+   * @param id The token ID
+   * @returns The updated token
+   */
+  async markAsUsed(id: string): Promise<VerificationToken> {
+    return this.update(id, {
+      used: true,
+      usedAt: new Date(),
+    });
   }
 }

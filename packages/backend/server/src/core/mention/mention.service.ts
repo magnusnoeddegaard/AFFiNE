@@ -76,6 +76,15 @@ export class MentionService {
   }
 
   /**
+   * Get document with content
+   * @param documentId Document ID
+   * @returns Document with content or null if not found
+   */
+    async getDocumentWithContent(documentId: string): Promise<any> {
+      return this.documentModel.getWithContent(documentId);
+    }
+
+  /**
    * Process a mention for a specific user
    * @param userId User ID who was mentioned
    * @param document Document in which the user was mentioned

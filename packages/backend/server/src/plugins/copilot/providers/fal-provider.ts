@@ -27,11 +27,11 @@ export class FALProvider extends BaseLLMProvider {
     super(
       'fal',
       config.model || 'fal-ai-llama',
-      config
+      config,
+      false, // supportsStreaming
+      false  // supportsTools
     );
     // FAL specializes in image generation but also provides text capabilities
-    this.supportsStreaming = false;
-    this.supportsTools = false;
   }
   
   /**

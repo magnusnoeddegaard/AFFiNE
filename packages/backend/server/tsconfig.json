@@ -22,9 +22,10 @@
       "@base/*": ["src/base/*"],
       "@core/*": ["src/core/*"],
       "@plugins/*": ["src/plugins/*"],
-      "@models/*": ["src/models/*"]
+      "@models/*": ["src/models/*"],
+      "@affine/server/*": ["src/*"]
     }
   },
-  "include": ["src/**/*", "test/**/*"],
+  "include": ["src/**/*", "test/**/*", "src/types/**/*.d.ts"],
   "references": []
 }

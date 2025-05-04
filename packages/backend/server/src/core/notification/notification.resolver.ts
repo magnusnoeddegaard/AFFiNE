@@ -32,7 +32,7 @@ export class NotificationResolver {
 
     // Otherwise get all notifications
     const notifications = await this.notificationService.getUserNotifications(user.id, options);
-    const totalCount = await this.notificationService.notificationModel.count({ userId: user.id });
+    const totalCount = await this.notificationService.countUserNotifications(user.id);
     return { notifications, totalCount };
   }
 
@@ -47,7 +47,7 @@ export class NotificationResolver {
     if (unreadOnly) {
       count = await this.notificationService.getUnreadCount(user.id);
     } else {
-      count = await this.notificationService.notificationModel.count({ userId: user.id });
+      count = await this.notificationService.countUserNotifications(user.id);
     }
     
     return { count };
@@ -59,7 +59,7 @@ export class NotificationResolver {
     @CurrentUser() user: any,
     @Args('id') id: string,
   ): Promise<NotificationDto> {
-    const notification = await this.notificationService.notificationModel.findById(id);
+    const notification = await this.notificationService.findNotificationById(id);
     
     // Check if the notification belongs to the user
     if (!notification || notification.userId !== user.id) {
@@ -84,7 +84,7 @@ export class NotificationResolver {
     @CurrentUser() user: any,
     @Args('id') id: string,
   ): Promise<NotificationDto> {
-    const notification = await this.notificationService.notificationModel.findById(id);
+    const notification = await this.notificationService.findNotificationById(id);
     
     // Check if the notification belongs to the user
     if (!notification || notification.userId !== user.id) {

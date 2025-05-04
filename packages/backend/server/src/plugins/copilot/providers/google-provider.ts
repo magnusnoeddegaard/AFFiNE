@@ -1,5 +1,9 @@
-import { BaseLLMProvider, LLMProviderConfig, LLMResponse } from './base-provider';
 import { Message } from '../types';
+import {
+  BaseLLMProvider,
+  LLMProviderConfig,
+  LLMResponse,
+} from './base-provider';
 
 /**
  * Google-specific configuration options for Gemini models
@@ -18,7 +22,7 @@ export interface GoogleConfig extends LLMProviderConfig {
 
 /**
  * Google provider implementation for Gemini models
- * 
+ *
  * Note: This is a partial implementation that simulates the Google AI API.
  * In a real implementation, you would use the actual Google AI SDK.
  */
@@ -27,25 +31,28 @@ export class GoogleProvider extends BaseLLMProvider {
     super(
       'google',
       config.model || 'gemini-1.5-pro',
-      config
+      config,
+      true, // supportsStreaming
+      true // supportsTools
     );
-    this.supportsStreaming = true;
-    this.supportsTools = true;
   }
-  
+
   /**
    * Generate a text completion from Google's Gemini models
    */
-  async complete(messages: Message[], options?: Partial<GoogleConfig>): Promise<LLMResponse> {
+  async complete(
+    messages: Message[],
+    options?: Partial<GoogleConfig>
+  ): Promise<LLMResponse> {
     const config = this.prepareConfig(options) as GoogleConfig;
     const formattedMessages = this.formatMessages(messages);
-    
+
     // Simulate API call - in a real implementation, this would use the Google AI SDK
     // For example:
     // const { GoogleGenerativeAI } = require('@google/generative-ai');
     // const genAI = new GoogleGenerativeAI(config.apiKey);
     // const model = genAI.getGenerativeModel({ model: config.model });
-    // 
+    //
     // const result = await model.generateContent({
     //   contents: formattedMessages,
     //   generationConfig: {
@@ -56,10 +63,15 @@ export class GoogleProvider extends BaseLLMProvider {
     //   },
     //   safetySettings: config.safetySettings,
     // });
-    
-    console.log(`[GoogleProvider] Generating completion with model: ${config.model}`);
-    console.log(`[GoogleProvider] Messages:`, JSON.stringify(formattedMessages, null, 2));
-    
+
+    console.log(
+      `[GoogleProvider] Generating completion with model: ${config.model}`
+    );
+    console.log(
+      `[GoogleProvider] Messages:`,
+      JSON.stringify(formattedMessages, null, 2)
+    );
+
     // Create a simulated response
     return {
       text: 'This is a simulated response from the Google Gemini provider. Gemini models are multimodal and can process both text and images.',
@@ -71,10 +83,10 @@ export class GoogleProvider extends BaseLLMProvider {
       metadata: {
         model: config.model,
         provider: 'google',
-      }
+      },
     };
   }
-  
+
   /**
    * Stream completions from Google Gemini
    */
@@ -84,13 +96,13 @@ export class GoogleProvider extends BaseLLMProvider {
   ): AsyncIterable<LLMResponse> {
     const config = this.prepareConfig(options) as GoogleConfig;
     const formattedMessages = this.formatMessages(messages);
-    
+
     // In a real implementation, we would stream from the Google AI SDK
     // For example:
     // const { GoogleGenerativeAI } = require('@google/generative-ai');
     // const genAI = new GoogleGenerativeAI(config.apiKey);
     // const model = genAI.getGenerativeModel({ model: config.model });
-    // 
+    //
     // const result = await model.generateContentStream({
     //   contents: formattedMessages,
     //   generationConfig: {
@@ -114,10 +126,15 @@ export class GoogleProvider extends BaseLLMProvider {
     //     };
     //   }
     // }
-    
-    console.log(`[GoogleProvider] Streaming completion with model: ${config.model}`);
-    console.log(`[GoogleProvider] Messages:`, JSON.stringify(formattedMessages, null, 2));
-    
+
+    console.log(
+      `[GoogleProvider] Streaming completion with model: ${config.model}`
+    );
+    console.log(
+      `[GoogleProvider] Messages:`,
+      JSON.stringify(formattedMessages, null, 2)
+    );
+
     // Simulate streaming responses
     const responseChunks = [
       'This ',
@@ -141,9 +158,9 @@ export class GoogleProvider extends BaseLLMProvider {
       'both ',
       'text ',
       'and ',
-      'images.'
+      'images.',
     ];
-    
+
     for (const chunk of responseChunks) {
       yield {
         text: chunk,
@@ -151,14 +168,14 @@ export class GoogleProvider extends BaseLLMProvider {
           model: config.model,
           provider: 'google',
           streaming: true,
-        }
+        },
       };
-      
+
       // Add a small delay to simulate network latency
       await new Promise(resolve => setTimeout(resolve, 100));
     }
   }
-  
+
   /**
    * Analyze an image using Gemini Pro Vision
    */
@@ -168,23 +185,23 @@ export class GoogleProvider extends BaseLLMProvider {
     options?: Partial<GoogleConfig>
   ): Promise<LLMResponse> {
     const config = this.prepareConfig(options) as GoogleConfig;
-    
+
     // In a real implementation, we would call the Google AI SDK
     // For example:
     // const { GoogleGenerativeAI } = require('@google/generative-ai');
     // const genAI = new GoogleGenerativeAI(config.apiKey);
     // const model = genAI.getGenerativeModel({ model: 'gemini-pro-vision' });
-    // 
+    //
     // const imageResponse = await fetch(imageUrl);
     // const imageData = await imageResponse.arrayBuffer();
-    // 
+    //
     // const result = await model.generateContent({
     //   contents: [
     //     {
     //       role: 'user',
     //       parts: [
     //         { text: prompt },
-    //         { 
+    //         {
     //           inlineData: {
     //             mimeType: 'image/jpeg',
     //             data: Buffer.from(imageData).toString('base64')
@@ -200,9 +217,11 @@ export class GoogleProvider extends BaseLLMProvider {
     //     topK: config.topK,
     //   },
     // });
-    
-    console.log(`[GoogleProvider] Analyzing image: ${imageUrl} with prompt: ${prompt}`);
-    
+
+    console.log(
+      `[GoogleProvider] Analyzing image: ${imageUrl} with prompt: ${prompt}`
+    );
+
     // Return a simulated response
     return {
       text: `Analysis of the image at ${imageUrl}: This is a simulated image analysis response from Google Gemini. Gemini models excel at understanding and describing complex visual content.`,
@@ -214,10 +233,10 @@ export class GoogleProvider extends BaseLLMProvider {
       metadata: {
         model: 'gemini-pro-vision',
         provider: 'google',
-      }
+      },
     };
   }
-  
+
   /**
    * Format messages for Google's Gemini API
    */
@@ -226,32 +245,32 @@ export class GoogleProvider extends BaseLLMProvider {
     let formattedMessages = [];
     let currentRole = null;
     let currentParts = [];
-    
+
     for (const message of messages) {
       // If role changes, push the accumulated parts and start a new message
       if (message.role !== currentRole && currentRole !== null) {
         formattedMessages.push({
           role: this.mapRole(currentRole),
-          parts: currentParts
+          parts: currentParts,
         });
         currentParts = [];
       }
-      
+
       currentRole = message.role;
       currentParts.push({ text: message.content });
     }
-    
+
     // Push the last message
     if (currentRole !== null && currentParts.length > 0) {
       formattedMessages.push({
         role: this.mapRole(currentRole),
-        parts: currentParts
+        parts: currentParts,
       });
     }
-    
+
     return formattedMessages;
   }
-  
+
   /**
    * Map roles from our standard format to Google's format
    */

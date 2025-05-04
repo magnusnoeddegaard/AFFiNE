@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+
 import { PrismaService } from '../base/prisma';
 import { BaseModel } from './base';
 import { DocumentContent, DocumentHistory } from './common';
@@ -25,13 +26,16 @@ export class HistoryModel extends BaseModel<DocumentHistory> {
    * @param options Query options
    * @returns The history entries
    */
-  async findByDocument(documentId: string, options: any = {}): Promise<DocumentHistory[]> {
+  async findByDocument(
+    documentId: string,
+    options: any = {}
+  ): Promise<DocumentHistory[]> {
     return this.findMany(
       { documentId },
       {
         orderBy: { version: 'desc' },
         ...options,
-      },
+      }
     );
   }
 
@@ -43,7 +47,7 @@ export class HistoryModel extends BaseModel<DocumentHistory> {
    */
   async getVersion(
     documentId: string,
-    version: number,
+    version: number
   ): Promise<{ history: DocumentHistory; content: DocumentContent } | null> {
     const history = await this.model.findFirst({
       where: {
@@ -51,19 +55,19 @@ export class HistoryModel extends BaseModel<DocumentHistory> {
         version,
       },
     });
-    
+
     if (!history) {
       return null;
     }
-    
+
     const content = await this.prisma.documentContent.findUnique({
       where: { id: history.contentId },
     });
-    
+
     if (!content) {
       return null;
     }
-    
+
     return { history, content };
   }
 
@@ -81,7 +85,7 @@ export class HistoryModel extends BaseModel<DocumentHistory> {
     contentId: string,
     version: number,
     createdById: string,
-    message?: string,
+    message?: string
   ): Promise<DocumentHistory> {
     return this.create({
       documentId,
@@ -104,24 +108,24 @@ export class HistoryModel extends BaseModel<DocumentHistory> {
     documentId: string,
     version: number,
     userId: string,
-    message?: string,
+    message?: string
   ): Promise<DocumentContent | null> {
-    return this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx: any) => {
       // Get the version to restore
       const versionData = await this.getVersion(documentId, version);
-      
+
       if (!versionData) {
         return null;
       }
-      
+
       // Get the latest version
       const latestContent = await tx.documentContent.findFirst({
         where: { documentId },
         orderBy: { version: 'desc' },
       });
-      
+
       const newVersion = latestContent ? latestContent.version + 1 : 1;
-      
+
       // Create new content based on the old version
       const newContent = await tx.documentContent.create({
         data: {
@@ -131,7 +135,7 @@ export class HistoryModel extends BaseModel<DocumentHistory> {
           blobIds: versionData.content.blobIds,
         },
       });
-      
+
       // Create history entry for the restore
       await tx.documentHistory.create({
         data: {
@@ -142,13 +146,13 @@ export class HistoryModel extends BaseModel<DocumentHistory> {
           message: message || `Restored from version ${version}`,
         },
       });
-      
+
       // Update document's updatedAt
       await tx.document.update({
         where: { id: documentId },
         data: { updatedAt: new Date() },
       });
-      
+
       return newContent;
     });
   }
@@ -162,7 +166,7 @@ export class HistoryModel extends BaseModel<DocumentHistory> {
     const result = await this.prisma.documentHistory.deleteMany({
       where: { documentId },
     });
-    
+
     return result.count;
   }
 
@@ -176,13 +180,16 @@ export class HistoryModel extends BaseModel<DocumentHistory> {
   async compareVersions(
     documentId: string,
     versionA: number,
-    versionB: number,
-  ): Promise<{ versionA: DocumentContent | null; versionB: DocumentContent | null }> {
+    versionB: number
+  ): Promise<{
+    versionA: DocumentContent | null;
+    versionB: DocumentContent | null;
+  }> {
     const [resultA, resultB] = await Promise.all([
       this.getVersion(documentId, versionA),
       this.getVersion(documentId, versionB),
     ]);
-    
+
     return {
       versionA: resultA ? resultA.content : null,
       versionB: resultB ? resultB.content : null,

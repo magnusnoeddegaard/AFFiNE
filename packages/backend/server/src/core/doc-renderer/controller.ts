@@ -5,11 +5,28 @@ import { Controller, Get, Logger, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import isMobile from 'is-mobile';
 
-import { Config, metrics } from '../../base';
-import { Models } from '../../models';
-import { htmlSanitize } from '../../native';
-import { Public } from '../auth';
-import { DocReader } from '../doc';
+// Fixed imports based on actual project structure
+import { ConfigService } from '../../base/config';
+import { MetricsService } from '../../base/metrics';
+import { PrismaService } from '../../base/prisma';
+import { htmlSanitize } from './html-sanitize';
+import { Public } from '../auth/decorators/decorator';
+import { DocumentService } from '../doc';
+"\core\\decorator.ts"
+import * as dotenv from 'dotenv';
+
+// Load environment variables from .env file in src folder
+dotenv.config({ path: join(__dirname, '../../../.env') });
+
+// Define env object to replace direct references
+const env = {
+  projectRoot: process.env.PROJECT_ROOT || process.cwd(),
+  namespaces: {
+    canary: process.env.NAMESPACE === 'canary',
+  },
+  selfhosted: process.env.SELFHOSTED === 'true',
+  prod: process.env.NODE_ENV === 'production',
+};
 
 interface RenderOptions {
   title: string;
@@ -50,9 +67,10 @@ export class DocRendererController {
   private readonly mobileAssets: HtmlAssets = defaultAssets;
 
   constructor(
-    private readonly doc: DocReader,
-    private readonly models: Models,
-    private readonly config: Config
+    private readonly doc: DocumentService, // Updated to use DocumentService
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService, // Changed to ConfigService
+    private readonly metricsService: MetricsService // Change to MetricsService
   ) {
     this.webAssets = this.readHtmlAssets(join(env.projectRoot, 'static'));
     this.mobileAssets = this.readHtmlAssets(
@@ -77,12 +95,13 @@ export class DocRendererController {
 
     // /:workspaceId/:docId
     if (workspaceId && !staticPaths.has(subPath) && restPaths.length === 0) {
+      // Find this section in the render method (around line 104)
       try {
         opts =
           workspaceId === subPath
             ? await this.getWorkspaceContent(workspaceId)
             : await this.getPageContent(workspaceId, subPath);
-        metrics.doc.counter('render').add(1);
+        this.metricsService.incrementCounter('doc.render', 1);
       } catch (e) {
         this.logger.error('failed to render page', e);
       }
@@ -100,12 +119,24 @@ export class DocRendererController {
     workspaceId: string,
     docId: string
   ): Promise<RenderOptions | null> {
-    let allowUrlPreview = await this.models.doc.isPublic(workspaceId, docId);
+    // Check if the document is public
+    const doc = await this.prisma.document.findFirst({
+      where: {
+        id: docId,
+        workspaceId: workspaceId,
+        isPublic: true,
+      },
+    });
+    
+    let allowUrlPreview = !!doc;
 
     if (!allowUrlPreview) {
       // if page is private, but workspace url preview is on
-      allowUrlPreview =
-        await this.models.workspace.allowUrlPreview(workspaceId);
+      const workspace = await this.prisma.workspace.findUnique({
+        where: { id: workspaceId },
+        select: { allowUrlPreview: true },
+      });
+      allowUrlPreview = !!workspace?.allowUrlPreview;
     }
 
     if (allowUrlPreview) {
@@ -118,21 +149,21 @@ export class DocRendererController {
   private async getWorkspaceContent(
     workspaceId: string
   ): Promise<RenderOptions | null> {
-    const allowUrlPreview =
-      await this.models.workspace.allowUrlPreview(workspaceId);
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { allowUrlPreview: true, name: true, avatarUrl: true },
+    });
+    
+    const allowUrlPreview = !!workspace?.allowUrlPreview;
 
-    if (allowUrlPreview) {
-      const workspaceContent = await this.doc.getWorkspaceContent(workspaceId);
-
-      if (workspaceContent) {
-        return {
-          title: workspaceContent.name,
-          summary: '',
-          avatar: workspaceContent.avatarUrl,
-        };
-      }
+    if (allowUrlPreview && workspace) {
+      return {
+        title: workspace.name,
+        summary: '',
+        avatar: workspace.avatarUrl || undefined,
+      };
     }
-
+    
     return null;
   }
 
@@ -141,7 +172,7 @@ export class DocRendererController {
     // TODO(@forehalo): how can we enable the type reference to @affine/env
     const envMeta: Record<string, any> = {
       publicPath: assets.publicPath,
-      subPath: this.config.server.path,
+      subPath: this.config.getString('SERVER_PATH', ''), // Use ConfigService methods
       renderer: 'ssr',
     };
 

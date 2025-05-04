@@ -71,10 +71,16 @@ export class InMemoryAssetStorage implements AssetStorage {
   ): Promise<string> {
     const id = `asset_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     
+    const { name, type, size, contentType, ...rest } = metadata;
+    
     const fullMetadata: AssetMetadata = {
-      ...metadata,
       id,
-      createdAt: new Date()
+      name,
+      type,
+      size,
+      contentType,
+      createdAt: new Date(),
+      ...rest  // Include any additional metadata properties
     };
     
     this.assets.set(id, { data, metadata: fullMetadata });

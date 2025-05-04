@@ -3,16 +3,16 @@ import {
   ApolloServerPlugin,
   GraphQLRequestListener,
   GraphQLRequestContext,
-} from 'apollo-server-plugin-base';
+} from '@apollo/server';
 import { Logger } from '@nestjs/common';
 
 @Plugin()
-export class LoggingPlugin implements ApolloServerPlugin {
+export class LoggingPlugin implements ApolloServerPlugin<any> {
   private readonly logger = new Logger('GraphQL');
 
   async requestDidStart(
-    requestContext: GraphQLRequestContext,
-  ): Promise<GraphQLRequestListener> {
+    requestContext: GraphQLRequestContext<any>,
+  ): Promise<GraphQLRequestListener<any>> {
     const query = requestContext.request.query?.replace(/\s+/g, ' ').trim();
     const operationName = requestContext.request.operationName;
     const variables = requestContext.request.variables;
@@ -39,9 +39,9 @@ export class LoggingPlugin implements ApolloServerPlugin {
           );
           responseContext.errors.forEach((error) => {
             this.logger.warn(`Error: ${error.message}`);
-            if (error.extensions?.exception?.stacktrace) {
+            if (error.extensions?.exception && 'stacktrace' in (error.extensions.exception as any)) {
               this.logger.debug(
-                `Stack: ${error.extensions.exception.stacktrace.join('\n')}`,
+                `Stack: ${(error.extensions.exception as any).stacktrace.join('\n')}`,
               );
             }
           });

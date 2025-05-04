@@ -34,10 +34,10 @@ export class OpenAIProvider extends BaseLLMProvider {
     super(
       'openai',
       config.model || 'gpt-4o',
-      config
+      config,
+      true,  // supportsStreaming
+      true   // supportsTools
     );
-    this.supportsStreaming = true;
-    this.supportsTools = true;
   }
   
   /**

@@ -24,8 +24,7 @@ export class MentionResolver {
     @Args('userIds', { type: () => [String] }) userIds: string[],
   ): Promise<MentionResponseDto> {
     // Get the document content to extract context for mentions
-    // Here we would typically get this from a document service or model directly
-    const document = await this.mentionService.documentModel.getWithContent(documentId);
+    const document = await this.mentionService.getDocumentWithContent(documentId);
     
     if (!document) {
       return { success: false, message: 'Document not found', processedCount: 0 };

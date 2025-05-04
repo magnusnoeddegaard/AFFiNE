@@ -19,7 +19,7 @@ export class DocumentSharingService {
     private readonly permissionService: PermissionService,
     private readonly activityService: WorkspaceActivityService,
   ) {
-    this.baseUrl = this.configService.get('BASE_URL', 'http://localhost:3000');
+    this.baseUrl = this.configService.get('BASE_URL') || 'http://localhost:3000';
   }
 
   /**
@@ -96,7 +96,7 @@ export class DocumentSharingService {
    */
   async getShareLinks(documentId: string, userId: string): Promise<PublicShareLink[]> {
     this.logger.debug(`Getting share links for document ${documentId}`);
-
+  
     // Check if user has necessary permissions
     await this.permissionService.enforcePermission(
       documentId,
@@ -104,15 +104,15 @@ export class DocumentSharingService {
       userId,
       PermissionLevel.READ,
     );
-
+  
     // Get share links
     const shareLinks = await this.prisma.documentShareLink.findMany({
       where: { documentId },
       orderBy: { createdAt: 'desc' },
     });
-
+  
     // Add full URL to each share link
-    return shareLinks.map(link => ({
+    return shareLinks.map((link: any) => ({
       ...link,
       url: `${this.baseUrl}/share/${link.token}`,
     }));
@@ -278,7 +278,7 @@ export class DocumentSharingService {
     isAuthenticated: boolean,
   ): Promise<boolean> {
     this.logger.debug(`Checking share access for document ${documentId} with token ${token}`);
-
+  
     // Find share link by token and document ID
     const shareLink = await this.prisma.documentShareLink.findFirst({
       where: {
@@ -286,23 +286,23 @@ export class DocumentSharingService {
         documentId,
       },
     });
-
+  
     if (!shareLink) {
       return false;
     }
-
+  
     // Check if share link has expired
     if (shareLink.expiresAt < new Date()) {
       return false;
     }
-
+  
     // If anonymous access is not allowed and user is not authenticated, deny access
     if (!shareLink.allowAnonymous && !isAuthenticated) {
       return false;
     }
-
+  
     // Map permission levels to numeric values for comparison
-    const permissionValue = {
+    const permissionValue: Record<PermissionLevel, number> = {
       [PermissionLevel.NONE]: 0,
       [PermissionLevel.READ]: 1,
       [PermissionLevel.COMMENT]: 2,
@@ -310,8 +310,8 @@ export class DocumentSharingService {
       [PermissionLevel.ADMIN]: 4,
       [PermissionLevel.OWNER]: 5,
     };
-
+  
     // Check if share link has sufficient permission level
-    return permissionValue[shareLink.permissionLevel] >= permissionValue[requiredPermission];
+    return permissionValue[shareLink.permissionLevel as PermissionLevel] >= permissionValue[requiredPermission];
   }
 }

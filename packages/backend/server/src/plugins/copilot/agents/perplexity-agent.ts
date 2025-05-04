@@ -41,7 +41,7 @@ export class PerplexityAgent extends BaseAgent<PerplexityAgentConfig> {
     // Initialize the Perplexity provider
     this.provider = new PerplexityProvider({
       apiKey: config.apiKey,
-      model: config.model,
+      model: config.model || 'pplx-70b-online', // Ensure model is never undefined
       temperature: config.temperature,
       maxTokens: config.maxTokens,
       topP: config.topP,

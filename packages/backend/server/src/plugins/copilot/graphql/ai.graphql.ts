@@ -390,12 +390,12 @@ export class AIResolver {
       const initialState = {
         messages: [
           {
-            role: 'system',
+            role: 'system' as const,
             content: 'You are a helpful assistant that provides inline suggestions to continue text.',
             createdAt: new Date().toISOString()
           },
           {
-            role: 'user',
+            role: 'user' as const,
             content: `Continue this text: ${input.text}`,
             createdAt: new Date().toISOString()
           }
@@ -454,12 +454,12 @@ export class AIResolver {
       const initialState = {
         messages: [
           {
-            role: 'system',
+            role: 'system' as const,
             content: systemPrompt,
             createdAt: new Date().toISOString()
           },
           {
-            role: 'user',
+            role: 'user' as const,
             content: `${input.actionId}: ${input.selection}`,
             createdAt: new Date().toISOString()
           }

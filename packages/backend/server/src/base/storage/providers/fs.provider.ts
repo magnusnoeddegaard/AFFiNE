@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { StorageProvider } from './storage.provider';
-import { promises as fs, createReadStream, constants } from 'fs';
+import { promises as fs, createReadStream, createWriteStream, constants } from 'fs';
 import { join, dirname } from 'path';
 import { Readable } from 'stream';
 
@@ -38,10 +38,10 @@ export class FileSystemStorageProvider implements StorageProvider {
       await fs.writeFile(filePath, content, 'utf8');
     } else if (content instanceof Readable) {
       // Handle stream
-      const writeStream = createReadStream(filePath);
+      const writeStream = createWriteStream(filePath);
       return new Promise((resolve, reject) => {
         content.pipe(writeStream);
-        content.on('end', resolve);
+        writeStream.on('finish', resolve);
         content.on('error', reject);
         writeStream.on('error', reject);
       });

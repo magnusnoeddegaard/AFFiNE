@@ -157,13 +157,13 @@ export class UserService {
     const key = `avatars/${userId}/${Date.now()}.${fileType.split('/')[1]}`;
 
     // Store the file using the storage service
-    await this.storageService.put(key, file, {
+    await this.storageService.storeFile(key, file, {
       contentType: fileType,
-      isPublic: true,
+      isPublic: "true",
     });
 
     // Get the public URL of the avatar
-    const avatarUrl = await this.storageService.getPublicUrl(key);
+    const avatarUrl = await this.storageService.getFileUrl(key);
 
     // Update the user's avatar URL
     await this.prisma.user.update({
@@ -183,7 +183,7 @@ export class UserService {
     }
 
     // Update email in Supabase and database
-    await this.authService.updateEmail(userId, newEmail);
+    await this.authService.updateEmail(userId, newEmail, password);
     
     // Update user in database
     const updatedUser = await this.prisma.user.update({
@@ -210,7 +210,7 @@ export class UserService {
     }
 
     // Delete user in Supabase
-    await this.authService.deleteUser(userId);
+    await this.authService.deleteUser(userId, password);
     
     // Delete user in database - this should cascade delete all other user data
     await this.prisma.user.delete({

@@ -1,19 +1,24 @@
 import { Module } from '@nestjs/common';
-import { WorkspaceService } from './service';
-import { WorkspaceResolver, WorkspaceMemberResolver, WorkspaceInvitationResolver } from './resolver';
+
 import { PermissionModule } from '../permission';
-import { TeamModule } from './team/module';
-import { InvitationModule } from './invitation/invitation.module';
-import { WorkspaceActivityModule } from './activity';
-import { PublicSharingModule } from './public-sharing';
+import { ConfigModule as AppConfigModule } from '../../base/config';
+import { PrismaModule } from '../../base/prisma';
+import { MutexModule } from '../../base/mutex';
+import {
+  WorkspaceInvitationResolver,
+  WorkspaceMemberResolver,
+  WorkspaceResolver,
+} from './resolver';
+import { WorkspaceService } from './service';
+
+export { WorkspaceService } from './service';
 
 @Module({
   imports: [
     PermissionModule,
-    TeamModule,
-    InvitationModule,
-    WorkspaceActivityModule,
-    PublicSharingModule,
+    AppConfigModule,
+    PrismaModule,
+    MutexModule,
   ],
   providers: [
     WorkspaceService,
@@ -21,8 +26,6 @@ import { PublicSharingModule } from './public-sharing';
     WorkspaceMemberResolver,
     WorkspaceInvitationResolver,
   ],
-  exports: [
-    WorkspaceService,
-  ],
+  exports: [WorkspaceService],
 })
 export class WorkspaceModule {}

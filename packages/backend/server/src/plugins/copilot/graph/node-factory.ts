@@ -37,6 +37,9 @@ export class DefaultNodeFactory {
     // Check for custom node creators first
     if (this.customNodeCreators.has(type)) {
       const creator = this.customNodeCreators.get(type);
+      if (!creator) {
+        throw new Error(`Custom node creator for type '${type}' was retrieved but is undefined`);
+      }
       return creator(id, { ...config, id });
     }
     

@@ -2,10 +2,14 @@ import { Process, Processor } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bull';
 import { GraphExecutor } from '../graph/graph-executor';
-import { TextGenerationGraph } from '../graph/text-generation-graph';
-import { ImageGenerationGraph } from '../graph/image-generation-graph';
-import { AgentFactory } from '../agent/agent-factory';
+import { TextGenerationGraph } from '../workflows/text-generation-graph';
+import { ImageGenerationGraph } from '../workflows/image-generation-graph'
+import { AgentFactory } from '../agents/agent-factory';
 import { PubSub } from 'graphql-subscriptions';
+import { StateManager } from '../state/state-manager';
+import { DefaultNodeFactory } from '../graph/node-factory';
+import { ContextService } from '../context/context-service';
+import { Message } from '../types'; // Import the Message type
 
 /**
  * Processor responsible for handling AI generation tasks in the background
@@ -17,6 +21,11 @@ export class AIProcessor {
   constructor(
     private readonly agentFactory: AgentFactory,
     private readonly pubSub: PubSub,
+    private readonly stateManager: StateManager,
+    private readonly nodeFactory: DefaultNodeFactory,
+    private readonly contextService: ContextService,
+    private readonly textGenerationGraph: TextGenerationGraph,
+    private readonly imageGenerationGraph: ImageGenerationGraph,
   ) {}
 
   /**
@@ -29,14 +38,10 @@ export class AIProcessor {
       
       const { sessionId, message, contextIds, userId, workspaceId } = job.data;
       
-      // Create graph executor with text generation graph
-      const graphDefinition = new TextGenerationGraph(this.agentFactory).getDefinition();
-      const executor = new GraphExecutor(graphDefinition);
-      
-      // Execute graph with job data
-      const result = await executor.run({
+      // Use the injected TextGenerationGraph instance
+      const result = await this.textGenerationGraph.run({
         sessionId,
-        messages: [message],
+        messages: [message as Message], // Cast to Message type
         contextIds: contextIds || [],
         userId,
         workspaceId,
@@ -83,12 +88,8 @@ export class AIProcessor {
       
       const { sessionId, prompt, userId, workspaceId, size, style } = job.data;
       
-      // Create graph executor with image generation graph
-      const graphDefinition = new ImageGenerationGraph(this.agentFactory).getDefinition();
-      const executor = new GraphExecutor(graphDefinition);
-      
-      // Execute graph with job data
-      const result = await executor.run({
+      // Use the injected ImageGenerationGraph instance
+      const result = await this.imageGenerationGraph.run({
         sessionId,
         prompt,
         userId,
@@ -134,7 +135,7 @@ export class AIProcessor {
 interface TextGenerationJob {
   sessionId: string;
   message: {
-    role: string;
+    role: "system" | "user" | "assistant" | "tool"; // Fixed to use string literals
     content: string;
     attachments?: Array<{
       type: string;

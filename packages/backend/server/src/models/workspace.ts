@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
+
 import { PrismaService } from '../base/prisma';
 import { BaseModel } from './base';
-import { WorkspaceBase, WorkspaceSettings, WorkspaceVisibility } from './common';
+import {
+  WorkspaceBase,
+  WorkspaceSettings,
+  WorkspaceVisibility,
+} from './common';
 
 /**
  * Workspace model for workspace operations
@@ -25,7 +30,10 @@ export class WorkspaceModel extends BaseModel<WorkspaceBase> {
    * @returns The created workspace
    */
   async createWithSettings(
-    data: Omit<WorkspaceBase, 'id' | 'createdAt' | 'updatedAt' | 'deleted' | 'deletedAt' | 'settings'>,
+    data: Omit<
+      WorkspaceBase,
+      'id' | 'createdAt' | 'updatedAt' | 'deleted' | 'deletedAt' | 'settings'
+    >
   ): Promise<WorkspaceBase> {
     const defaultSettings: WorkspaceSettings = {
       defaultDocumentVisibility: WorkspaceVisibility.PRIVATE,
@@ -38,7 +46,7 @@ export class WorkspaceModel extends BaseModel<WorkspaceBase> {
         publicSharing: true,
       },
     };
-    
+
     return this.create({
       ...data,
       settings: defaultSettings,
@@ -51,11 +59,11 @@ export class WorkspaceModel extends BaseModel<WorkspaceBase> {
    * @param options Query options
    * @returns The workspaces
    */
-  async findByOwner(ownerId: string, options: any = {}): Promise<WorkspaceBase[]> {
-    return this.findMany(
-      { ownerId, deleted: false },
-      options,
-    );
+  async findByOwner(
+    ownerId: string,
+    options: any = {}
+  ): Promise<WorkspaceBase[]> {
+    return this.findMany({ ownerId, deleted: false }, options);
   }
 
   /**
@@ -66,14 +74,14 @@ export class WorkspaceModel extends BaseModel<WorkspaceBase> {
    */
   async updateSettings(
     id: string,
-    settings: Partial<WorkspaceSettings>,
+    settings: Partial<WorkspaceSettings>
   ): Promise<WorkspaceBase> {
     const workspace = await this.findById(id);
-    
+
     if (!workspace) {
       throw new Error(`Workspace not found: ${id}`);
     }
-    
+
     return this.update(id, {
       settings: {
         ...workspace.settings,
@@ -90,7 +98,7 @@ export class WorkspaceModel extends BaseModel<WorkspaceBase> {
    */
   async updateVisibility(
     id: string,
-    visibility: WorkspaceVisibility,
+    visibility: WorkspaceVisibility
   ): Promise<WorkspaceBase> {
     return this.update(id, { visibility });
   }
@@ -101,26 +109,33 @@ export class WorkspaceModel extends BaseModel<WorkspaceBase> {
    * @param newOwnerId The new owner ID
    * @returns The updated workspace
    */
-  async transferOwnership(id: string, newOwnerId: string): Promise<WorkspaceBase> {
-    return this.prisma.$transaction(async (tx) => {
+  async transferOwnership(
+    id: string,
+    newOwnerId: string
+  ): Promise<WorkspaceBase> {
+    return this.prisma.$transaction(async (tx: any) => {
       // Update the workspace
       const workspace = await tx.workspace.update({
         where: { id },
         data: { ownerId: newOwnerId },
       });
-      
+
       // Update the workspace user roles
       await tx.workspaceUser.updateMany({
         where: { workspaceId: id, userId: newOwnerId },
         data: { role: 'OWNER' },
       });
-      
+
       // Update the previous owner's role
       await tx.workspaceUser.updateMany({
-        where: { workspaceId: id, userId: workspace.ownerId, NOT: { userId: newOwnerId } },
+        where: {
+          workspaceId: id,
+          userId: workspace.ownerId,
+          NOT: { userId: newOwnerId },
+        },
         data: { role: 'ADMIN' },
       });
-      
+
       return workspace;
     });
   }
@@ -135,15 +150,15 @@ export class WorkspaceModel extends BaseModel<WorkspaceBase> {
   async clone(
     id: string,
     newName: string,
-    ownerId: string,
+    ownerId: string
   ): Promise<WorkspaceBase> {
     const source = await this.findById(id);
-    
+
     if (!source) {
       throw new Error(`Workspace not found: ${id}`);
     }
-    
-    return this.prisma.$transaction(async (tx) => {
+
+    return this.prisma.$transaction(async (tx: any) => {
       // Create the new workspace
       const workspace = await tx.workspace.create({
         data: {
@@ -155,7 +170,7 @@ export class WorkspaceModel extends BaseModel<WorkspaceBase> {
           settings: source.settings,
         },
       });
-      
+
       // Add the owner as a workspace user
       await tx.workspaceUser.create({
         data: {
@@ -175,7 +190,7 @@ export class WorkspaceModel extends BaseModel<WorkspaceBase> {
           },
         },
       });
-      
+
       return workspace;
     });
   }
@@ -202,41 +217,41 @@ export class WorkspaceModel extends BaseModel<WorkspaceBase> {
    */
   async hardDelete(id: string): Promise<boolean> {
     try {
-      await this.prisma.$transaction(async (tx) => {
+      await this.prisma.$transaction(async (tx: any) => {
         // Delete workspace documents and their content
         const documents = await tx.document.findMany({
           where: { workspaceId: id },
         });
-        
+
         for (const doc of documents) {
           await tx.documentContent.deleteMany({
             where: { documentId: doc.id },
           });
-          
+
           await tx.documentHistory.deleteMany({
             where: { documentId: doc.id },
           });
-          
+
           await tx.documentUser.deleteMany({
             where: { documentId: doc.id },
           });
         }
-        
+
         await tx.document.deleteMany({
           where: { workspaceId: id },
         });
-        
+
         // Delete workspace users
         await tx.workspaceUser.deleteMany({
           where: { workspaceId: id },
         });
-        
+
         // Delete the workspace
         await tx.workspace.delete({
           where: { id },
         });
       });
-      
+
       return true;
     } catch (error) {
       console.error('Error hard deleting workspace:', error);

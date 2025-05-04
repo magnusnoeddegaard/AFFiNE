@@ -1,7 +1,13 @@
 import { Injectable } from '@nestjs/common';
+
 import { PrismaService } from '../base/prisma';
 import { BaseModel } from './base';
-import { DocumentBase, DocumentContent, DocumentType, DocumentVisibility } from './common';
+import {
+  DocumentBase,
+  DocumentContent,
+  DocumentType,
+  DocumentVisibility,
+} from './common';
 
 /**
  * Document model for document operations
@@ -26,10 +32,13 @@ export class DocumentModel extends BaseModel<DocumentBase> {
    * @returns The created document with content
    */
   async createWithContent(
-    documentData: Omit<DocumentBase, 'id' | 'createdAt' | 'updatedAt' | 'deleted' | 'deletedAt'>,
-    contentData: Pick<DocumentContent, 'content' | 'blobIds'>,
+    documentData: Omit<
+      DocumentBase,
+      'id' | 'createdAt' | 'updatedAt' | 'deleted' | 'deletedAt'
+    >,
+    contentData: Pick<DocumentContent, 'content' | 'blobIds'>
   ): Promise<{ document: DocumentBase; content: DocumentContent }> {
-    return this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx: any) => {
       // Create the document
       const document = await tx.document.create({
         data: {
@@ -58,9 +67,11 @@ export class DocumentModel extends BaseModel<DocumentBase> {
    * @param id The document ID
    * @returns The document with content
    */
-  async getWithContent(id: string): Promise<{ document: DocumentBase; content: DocumentContent } | null> {
+  async getWithContent(
+    id: string
+  ): Promise<{ document: DocumentBase; content: DocumentContent } | null> {
     const document = await this.findById(id);
-    
+
     if (!document) {
       return null;
     }
@@ -93,17 +104,17 @@ export class DocumentModel extends BaseModel<DocumentBase> {
     blobIds: string[] = [],
     createHistory: boolean = true,
     userId?: string,
-    message?: string,
+    message?: string
   ): Promise<DocumentContent> {
-    return this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx: any) => {
       // Get the latest version
       const latestContent = await tx.documentContent.findFirst({
         where: { documentId },
         orderBy: { version: 'desc' },
       });
-      
+
       const newVersion = latestContent ? latestContent.version + 1 : 1;
-      
+
       // Create new content version
       const newContent = await tx.documentContent.create({
         data: {
@@ -113,13 +124,13 @@ export class DocumentModel extends BaseModel<DocumentBase> {
           blobIds,
         },
       });
-      
+
       // Update document's updatedAt
       await tx.document.update({
         where: { id: documentId },
         data: { updatedAt: new Date() },
       });
-      
+
       // Create history entry if requested
       if (createHistory && userId) {
         await tx.documentHistory.create({
@@ -132,7 +143,7 @@ export class DocumentModel extends BaseModel<DocumentBase> {
           },
         });
       }
-      
+
       return newContent;
     });
   }
@@ -143,7 +154,10 @@ export class DocumentModel extends BaseModel<DocumentBase> {
    * @param options Query options
    * @returns The documents
    */
-  async findByWorkspace(workspaceId: string, options: any = {}): Promise<DocumentBase[]> {
+  async findByWorkspace(
+    workspaceId: string,
+    options: any = {}
+  ): Promise<DocumentBase[]> {
     return this.findMany({ workspaceId, deleted: false }, options);
   }
 
@@ -153,7 +167,10 @@ export class DocumentModel extends BaseModel<DocumentBase> {
    * @param options Query options
    * @returns The child documents
    */
-  async findByParent(parentId: string, options: any = {}): Promise<DocumentBase[]> {
+  async findByParent(
+    parentId: string,
+    options: any = {}
+  ): Promise<DocumentBase[]> {
     return this.findMany({ parentId, deleted: false }, options);
   }
 
@@ -163,13 +180,16 @@ export class DocumentModel extends BaseModel<DocumentBase> {
    * @param options Query options
    * @returns The favorited documents
    */
-  async findFavorites(workspaceId: string, options: any = {}): Promise<DocumentBase[]> {
+  async findFavorites(
+    workspaceId: string,
+    options: any = {}
+  ): Promise<DocumentBase[]> {
     return this.findMany(
       { workspaceId, favorite: true, deleted: false },
       {
         orderBy: { favoriteOrder: 'asc' },
         ...options,
-      },
+      }
     );
   }
 
@@ -194,12 +214,12 @@ export class DocumentModel extends BaseModel<DocumentBase> {
    * @returns The deleted document
    */
   async hardDelete(id: string): Promise<DocumentBase> {
-    return this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx: any) => {
       // Delete related content and history
       await tx.documentContent.deleteMany({ where: { documentId: id } });
       await tx.documentHistory.deleteMany({ where: { documentId: id } });
       await tx.documentUser.deleteMany({ where: { documentId: id } });
-      
+
       // Delete the document
       return tx.document.delete({ where: { id } });
     });
@@ -225,7 +245,11 @@ export class DocumentModel extends BaseModel<DocumentBase> {
    * @param favoriteOrder Optional order for favorites
    * @returns The updated document
    */
-  async toggleFavorite(id: string, favorite: boolean, favoriteOrder?: number): Promise<DocumentBase> {
+  async toggleFavorite(
+    id: string,
+    favorite: boolean,
+    favoriteOrder?: number
+  ): Promise<DocumentBase> {
     return this.model.update({
       where: { id },
       data: {

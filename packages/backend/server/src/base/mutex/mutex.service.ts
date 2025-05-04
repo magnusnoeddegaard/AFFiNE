@@ -23,8 +23,9 @@ export class MutexService {
     const lockKey = this.getLockKey(key);
     const token = this.generateToken();
     
-    // Use Redis SET NX (not exists) with expiry
-    const acquired = await this.redisService.client.set(
+    // Use Redis SET NX (not exists) with expiry through the getClient() method
+    const redis = this.redisService.getClient();
+    const acquired = await redis.set(
       lockKey,
       token,
       'PX', // PX = milliseconds expiry
@@ -59,7 +60,8 @@ export class MutexService {
       end
     `;
     
-    const result = await this.redisService.client.eval(
+    const redis = this.redisService.getClient();
+    const result = await redis.eval(
       script,
       1, // number of keys
       lockKey, // KEYS[1]

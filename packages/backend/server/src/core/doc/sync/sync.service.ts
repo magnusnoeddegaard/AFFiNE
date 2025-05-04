@@ -4,7 +4,6 @@ import { DocumentModel } from '../../../models/doc';
 import { MutexService } from '../../../base/mutex/mutex.service';
 import { RedisService } from '../../../base/redis/redis.service';
 import { DocumentHistoryService } from '../history.service';
-
 /**
  * Service for handling document real-time synchronization
  */
@@ -51,7 +50,11 @@ export class DocumentSyncService {
       if (!this.documentClients.has(documentId)) {
         this.documentClients.set(documentId, new Set());
       }
-      this.documentClients.get(documentId).add(client.id);
+      // Fix Error 1: Object is possibly 'undefined'
+      const clientSet = this.documentClients.get(documentId);
+      if (clientSet) {
+        clientSet.add(client.id);
+      }
       
       // Notify other clients that user joined
       client.to(`document:${documentId}`).emit('user-joined', {
@@ -86,11 +89,16 @@ export class DocumentSyncService {
       
       // Remove client from document tracking
       if (this.documentClients.has(documentId)) {
-        this.documentClients.get(documentId).delete(client.id);
-        
-        // Cleanup if the set is empty
-        if (this.documentClients.get(documentId).size === 0) {
-          this.documentClients.delete(documentId);
+        // Fix Error 2: Object is possibly 'undefined'
+        const clientSet = this.documentClients.get(documentId);
+        if (clientSet) {
+          clientSet.delete(client.id);
+          
+          // Cleanup if the set is empty
+          // Fix Error 3: Object is possibly 'undefined'
+          if (clientSet.size === 0) {
+            this.documentClients.delete(documentId);
+          }
         }
       }
       
@@ -158,8 +166,7 @@ export class DocumentSyncService {
   ): Promise<void> {
     const { documentId, operation, version, cursor } = data;
     
-    // Use mutex to prevent race conditions during updates
-    await this.mutexService.withMutex(`document:${documentId}:update`, async () => {
+    await this.mutexService.withLock(`document:${documentId}:update`, async () => {
       // Get the latest document content
       const latestContent = await this.historyService.getLatestContent(documentId);
       
@@ -263,16 +270,19 @@ export class DocumentSyncService {
     const activeUsers: Array<{ userId: string; name: string }> = [];
     
     if (this.documentClients.has(documentId)) {
-      const clientIds = this.documentClients.get(documentId);
+      // Fix Error 5: 'clientIds' is possibly 'undefined'
+      const clientSet = this.documentClients.get(documentId);
       
-      for (const clientId of clientIds) {
-        const user = this.clientUserMap.get(clientId);
-        
-        if (user) {
-          activeUsers.push({
-            userId: user.id,
-            name: user.name,
-          });
+      if (clientSet) {
+        for (const clientId of clientSet) {
+          const user = this.clientUserMap.get(clientId);
+          
+          if (user) {
+            activeUsers.push({
+              userId: user.id,
+              name: user.name,
+            });
+          }
         }
       }
     }

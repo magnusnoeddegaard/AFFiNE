@@ -1,20 +1,26 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { PrismaService } from '../../base/prisma/prisma.service';
-import { ConfigService } from '../../base/config/config.service';
-import { PermissionService } from '../permission/service';
-import { 
-  AddWorkspaceMemberInput, 
-  CreateWorkspaceInput, 
-  InvitationStatus, 
-  InviteToWorkspaceInput, 
-  RespondToInvitationInput, 
-  UpdateWorkspaceInput, 
-  UpdateWorkspaceMemberRoleInput, 
-  WorkspaceMemberRole 
-} from './types';
-import { PermissionLevel, ResourceType } from '../permission/types';
+import {
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { randomUUID } from 'crypto';
+
+import { ConfigService } from '../../base/config/config.service';
 import { MutexService } from '../../base/mutex/mutex.service';
+import { PrismaService } from '../../base/prisma/prisma.service';
+import { PermissionService } from '../permission/service';
+import { PermissionLevel, ResourceType } from '../permission/types';
+import {
+  AddWorkspaceMemberInput,
+  CreateWorkspaceInput,
+  InvitationStatus,
+  InviteToWorkspaceInput,
+  RespondToInvitationInput,
+  UpdateWorkspaceInput,
+  UpdateWorkspaceMemberRoleInput,
+  WorkspaceMemberRole,
+} from './types';
 
 @Injectable()
 export class WorkspaceService {
@@ -24,13 +30,13 @@ export class WorkspaceService {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly permissionService: PermissionService,
-    private readonly mutexService: MutexService,
+    private readonly mutexService: MutexService
   ) {}
 
   async createWorkspace(userId: string, input: CreateWorkspaceInput) {
     this.logger.debug(`Creating workspace for user ${userId}`);
-    
-    return this.prisma.$transaction(async (tx) => {
+
+    return this.prisma.$transaction(async (tx: any) => {
       // Create the workspace
       const workspace = await tx.workspace.create({
         data: {
@@ -67,7 +73,7 @@ export class WorkspaceService {
 
   async getWorkspace(id: string) {
     this.logger.debug(`Getting workspace ${id}`);
-    
+
     const workspace = await this.prisma.workspace.findUnique({
       where: { id },
     });
@@ -79,15 +85,19 @@ export class WorkspaceService {
     return workspace;
   }
 
-  async updateWorkspace(id: string, userId: string, input: UpdateWorkspaceInput) {
+  async updateWorkspace(
+    id: string,
+    userId: string,
+    input: UpdateWorkspaceInput
+  ) {
     this.logger.debug(`Updating workspace ${id}`);
-    
+
     // Check if user has admin permission
     await this.permissionService.enforcePermission(
       id,
       ResourceType.WORKSPACE,
       userId,
-      PermissionLevel.ADMIN,
+      PermissionLevel.ADMIN
     );
 
     return this.prisma.workspace.update({
@@ -98,18 +108,18 @@ export class WorkspaceService {
 
   async deleteWorkspace(id: string, userId: string) {
     this.logger.debug(`Deleting workspace ${id}`);
-    
+
     // Check if user has owner permission
     await this.permissionService.enforcePermission(
       id,
       ResourceType.WORKSPACE,
       userId,
-      PermissionLevel.OWNER,
+      PermissionLevel.OWNER
     );
 
     // Use mutex to prevent race conditions
-    return this.mutexService.runWithLock(`workspace:${id}:delete`, async () => {
-      return this.prisma.$transaction(async (tx) => {
+    return this.mutexService.withLock(`workspace:${id}:delete`, async () => {
+      return this.prisma.$transaction(async (tx: any) => {
         // Delete all permissions for the workspace
         await tx.permission.deleteMany({
           where: {
@@ -143,18 +153,18 @@ export class WorkspaceService {
 
   async getUserWorkspaces(userId: string) {
     this.logger.debug(`Getting workspaces for user ${userId}`);
-    
+
     const memberships = await this.prisma.workspaceMember.findMany({
       where: { userId },
       include: { workspace: true },
     });
 
-    return memberships.map((m) => m.workspace);
+    return memberships.map((m: { workspace: any }) => m.workspace);
   }
 
   async getWorkspaceMembers(workspaceId: string) {
     this.logger.debug(`Getting members for workspace ${workspaceId}`);
-    
+
     return this.prisma.workspaceMember.findMany({
       where: { workspaceId },
       include: { user: true },
@@ -162,14 +172,16 @@ export class WorkspaceService {
   }
 
   async addWorkspaceMember(userId: string, input: AddWorkspaceMemberInput) {
-    this.logger.debug(`Adding member ${input.userId} to workspace ${input.workspaceId}`);
-    
+    this.logger.debug(
+      `Adding member ${input.userId} to workspace ${input.workspaceId}`
+    );
+
     // Check if user has admin permission
     await this.permissionService.enforcePermission(
       input.workspaceId,
       ResourceType.WORKSPACE,
       userId,
-      PermissionLevel.ADMIN,
+      PermissionLevel.ADMIN
     );
 
     // Check if member role is OWNER and current user is owner
@@ -178,11 +190,13 @@ export class WorkspaceService {
         input.workspaceId,
         ResourceType.WORKSPACE,
         userId,
-        PermissionLevel.OWNER,
+        PermissionLevel.OWNER
       );
 
       if (!check.hasPermission) {
-        throw new ForbiddenException('Only the workspace owner can assign owner role');
+        throw new ForbiddenException(
+          'Only the workspace owner can assign owner role'
+        );
       }
     }
 
@@ -195,10 +209,12 @@ export class WorkspaceService {
     });
 
     if (existingMember) {
-      throw new ForbiddenException('User is already a member of this workspace');
+      throw new ForbiddenException(
+        'User is already a member of this workspace'
+      );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx: any) => {
       // Create workspace member entry
       const member = await tx.workspaceMember.create({
         data: {
@@ -233,10 +249,12 @@ export class WorkspaceService {
     workspaceId: string,
     memberId: string,
     currentUserId: string,
-    input: UpdateWorkspaceMemberRoleInput,
+    input: UpdateWorkspaceMemberRoleInput
   ) {
-    this.logger.debug(`Updating role for member ${memberId} in workspace ${workspaceId}`);
-    
+    this.logger.debug(
+      `Updating role for member ${memberId} in workspace ${workspaceId}`
+    );
+
     // Get the current member to update
     const member = await this.prisma.workspaceMember.findFirst({
       where: {
@@ -256,7 +274,7 @@ export class WorkspaceService {
         workspaceId,
         ResourceType.WORKSPACE,
         currentUserId,
-        PermissionLevel.OWNER,
+        PermissionLevel.OWNER
       );
     } else {
       // Admins can change non-owner roles
@@ -264,16 +282,21 @@ export class WorkspaceService {
         workspaceId,
         ResourceType.WORKSPACE,
         currentUserId,
-        PermissionLevel.ADMIN,
+        PermissionLevel.ADMIN
       );
 
       // But if the target member is an owner, only they can demote themselves
-      if (member.role === WorkspaceMemberRole.OWNER && memberId !== currentUserId) {
-        throw new ForbiddenException('You cannot change the role of the workspace owner');
+      if (
+        member.role === WorkspaceMemberRole.OWNER &&
+        memberId !== currentUserId
+      ) {
+        throw new ForbiddenException(
+          'You cannot change the role of the workspace owner'
+        );
       }
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx: any) => {
       // If transferring ownership, update the previous owner's role
       if (input.role === WorkspaceMemberRole.OWNER) {
         // Find the current owner
@@ -336,9 +359,15 @@ export class WorkspaceService {
     });
   }
 
-  async removeWorkspaceMember(workspaceId: string, memberId: string, currentUserId: string) {
-    this.logger.debug(`Removing member ${memberId} from workspace ${workspaceId}`);
-    
+  async removeWorkspaceMember(
+    workspaceId: string,
+    memberId: string,
+    currentUserId: string
+  ) {
+    this.logger.debug(
+      `Removing member ${memberId} from workspace ${workspaceId}`
+    );
+
     // Get the member to remove
     const member = await this.prisma.workspaceMember.findFirst({
       where: {
@@ -362,11 +391,11 @@ export class WorkspaceService {
         workspaceId,
         ResourceType.WORKSPACE,
         currentUserId,
-        PermissionLevel.ADMIN,
+        PermissionLevel.ADMIN
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    return this.prisma.$transaction(async (tx: any) => {
       // Delete member's workspace permissions
       await tx.permission.deleteMany({
         where: {
@@ -383,15 +412,20 @@ export class WorkspaceService {
     });
   }
 
-  async inviteToWorkspace(currentUserId: string, input: InviteToWorkspaceInput) {
-    this.logger.debug(`Inviting ${input.email} to workspace ${input.workspaceId}`);
-    
+  async inviteToWorkspace(
+    currentUserId: string,
+    input: InviteToWorkspaceInput
+  ) {
+    this.logger.debug(
+      `Inviting ${input.email} to workspace ${input.workspaceId}`
+    );
+
     // Check if user has admin permission
     await this.permissionService.enforcePermission(
       input.workspaceId,
       ResourceType.WORKSPACE,
       currentUserId,
-      PermissionLevel.ADMIN,
+      PermissionLevel.ADMIN
     );
 
     // If inviting as owner, check if current user is the owner
@@ -400,11 +434,13 @@ export class WorkspaceService {
         input.workspaceId,
         ResourceType.WORKSPACE,
         currentUserId,
-        PermissionLevel.OWNER,
+        PermissionLevel.OWNER
       );
 
       if (!check.hasPermission) {
-        throw new ForbiddenException('Only the workspace owner can invite with owner role');
+        throw new ForbiddenException(
+          'Only the workspace owner can invite with owner role'
+        );
       }
     }
 
@@ -423,7 +459,9 @@ export class WorkspaceService {
     });
 
     if (existingInvitation) {
-      throw new ForbiddenException('An invitation has already been sent to this email');
+      throw new ForbiddenException(
+        'An invitation has already been sent to this email'
+      );
     }
 
     // Check if user is already a member
@@ -436,13 +474,19 @@ export class WorkspaceService {
       });
 
       if (existingMember) {
-        throw new ForbiddenException('User is already a member of this workspace');
+        throw new ForbiddenException(
+          'User is already a member of this workspace'
+        );
       }
     }
 
     // Calculate expiration date (default: 7 days)
-    const expirationDays = this.configService.get('INVITATION_EXPIRATION_DAYS', 7);
+    const expirationDays = this.configService.getNumber(
+      'INVITATION_EXPIRATION_DAYS',
+      7
+    );
     const expiresAt = new Date();
+    
     expiresAt.setDate(expiresAt.getDate() + expirationDays);
 
     // Create the invitation
@@ -465,13 +509,13 @@ export class WorkspaceService {
 
   async getWorkspaceInvitations(workspaceId: string, currentUserId: string) {
     this.logger.debug(`Getting invitations for workspace ${workspaceId}`);
-    
+
     // Check if user has admin permission
     await this.permissionService.enforcePermission(
       workspaceId,
       ResourceType.WORKSPACE,
       currentUserId,
-      PermissionLevel.ADMIN,
+      PermissionLevel.ADMIN
     );
 
     return this.prisma.workspaceInvitation.findMany({
@@ -482,7 +526,7 @@ export class WorkspaceService {
 
   async getUserInvitations(userId: string) {
     this.logger.debug(`Getting invitations for user ${userId}`);
-    
+
     // Get user's email
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -504,9 +548,15 @@ export class WorkspaceService {
     });
   }
 
-  async respondToInvitation(invitationId: string, userId: string, input: RespondToInvitationInput) {
-    this.logger.debug(`User ${userId} responding to invitation ${invitationId}`);
-    
+  async respondToInvitation(
+    invitationId: string,
+    userId: string,
+    input: RespondToInvitationInput
+  ) {
+    this.logger.debug(
+      `User ${userId} responding to invitation ${invitationId}`
+    );
+
     // Check if invitation exists and is pending
     const invitation = await this.prisma.workspaceInvitation.findUnique({
       where: { id: invitationId },
@@ -517,7 +567,9 @@ export class WorkspaceService {
     }
 
     if (invitation.status !== InvitationStatus.PENDING) {
-      throw new ForbiddenException('This invitation has already been responded to');
+      throw new ForbiddenException(
+        'This invitation has already been responded to'
+      );
     }
 
     if (invitation.expiresAt < new Date()) {
@@ -563,7 +615,7 @@ export class WorkspaceService {
 
   async cancelInvitation(invitationId: string, currentUserId: string) {
     this.logger.debug(`Canceling invitation ${invitationId}`);
-    
+
     // Check if invitation exists
     const invitation = await this.prisma.workspaceInvitation.findUnique({
       where: { id: invitationId },
@@ -578,7 +630,7 @@ export class WorkspaceService {
       invitation.workspaceId,
       ResourceType.WORKSPACE,
       currentUserId,
-      PermissionLevel.ADMIN,
+      PermissionLevel.ADMIN
     );
 
     return this.prisma.workspaceInvitation.update({

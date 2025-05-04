@@ -37,6 +37,7 @@ model User {
   leadingTeams  Team[]        @relation("TeamLeader")
   teamMemberships TeamMember[] @relation("TeamUser")
   addedTeamMembers TeamMember[] @relation("TeamMemberAdder")
+  createdBlobs  Blob[]        @relation("BlobCreator")
 
   @@index([email])
   @@index([authId])
@@ -96,6 +97,7 @@ model Document {
   users       DocumentUser[]
   history     DocumentHistory[]
   permissions Permission[] @relation("DocumentPermissions")
+  blobs       Blob[]       @relation("DocumentBlobs")
 
   @@index([workspaceId])
   @@index([parentId])
@@ -190,6 +192,7 @@ model Workspace {
   permissions Permission[] @relation("WorkspacePermissions")
   userGroups  UserGroup[]
   teams       Team[]
+  blobs       Blob[]       @relation("WorkspaceBlobs")
 
   @@index([ownerId])
   @@index([deleted])
@@ -413,4 +416,38 @@ model Session {
   @@index([userId])
   @@index([token])
   @@index([expires])
+}
+
+// Blob storage model
+
+enum BlobType {
+  ATTACHMENT
+  IMAGE
+  AVATAR
+  OTHER
+}
+
+model Blob {
+  id          String     @id @default(uuid())
+  key         String
+  name        String
+  mimeType    String
+  size        Int
+  type        String
+  url         String
+  createdById String
+  createdBy   User       @relation("BlobCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  documentId  String?
+  document    Document?  @relation("DocumentBlobs", fields: [documentId], references: [id], onDelete: SetNull)
+  workspaceId String?
+  workspace   Workspace? @relation("WorkspaceBlobs", fields: [workspaceId], references: [id], onDelete: SetNull)
+  metadata    String?    // Store JSON metadata as a string
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([createdById])
+  @@index([documentId])
+  @@index([workspaceId])
+  @@index([type])
+  @@index([key])
 }

@@ -1,7 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../../base/prisma/prisma.service';
-import { ActivityType, GetWorkspaceActivitiesInput, WorkspaceActivity } from '../types';
 import { randomUUID } from 'crypto';
+
+import { PrismaService } from '../../../base/prisma/prisma.service';
+import {
+  ActivityType,
+  GetWorkspaceActivitiesInput,
+  WorkspaceActivity,
+} from '../types';
 
 @Injectable()
 export class WorkspaceActivityService {
@@ -20,7 +25,9 @@ export class WorkspaceActivityService {
     details?: string,
     targetId?: string
   ): Promise<WorkspaceActivity> {
-    this.logger.debug(`Creating activity log: ${activityType} by ${userId} in workspace ${workspaceId}`);
+    this.logger.debug(
+      `Creating activity log: ${activityType} by ${userId} in workspace ${workspaceId}`
+    );
 
     return this.prisma.workspaceActivity.create({
       data: {
@@ -137,7 +144,9 @@ export class WorkspaceActivityService {
     });
 
     // Initialize result with all activity types set to 0
-    const result: Record<ActivityType, number> = Object.values(ActivityType).reduce(
+    const result: Record<ActivityType, number> = Object.values(
+      ActivityType
+    ).reduce(
       (acc, type) => {
         acc[type] = 0;
         return acc;
@@ -146,9 +155,11 @@ export class WorkspaceActivityService {
     );
 
     // Update with actual counts
-    counts.forEach((item) => {
-      result[item.activityType as ActivityType] = item._count.activityType;
-    });
+    counts.forEach(
+      (item: { activityType: string; _count: { activityType: number } }) => {
+        result[item.activityType as ActivityType] = item._count.activityType;
+      }
+    );
 
     return result;
   }

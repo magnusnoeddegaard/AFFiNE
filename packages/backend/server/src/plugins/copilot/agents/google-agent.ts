@@ -44,7 +44,7 @@ export class GoogleAgent extends BaseAgent<GoogleAgentConfig> {
     // Initialize the Google provider
     this.provider = new GoogleProvider({
       apiKey: config.apiKey,
-      model: config.model,
+      model: config.model || 'gemini-1.5-pro', // Ensure model is never undefined
       temperature: config.temperature,
       maxOutputTokens: config.maxOutputTokens,
       topP: config.topP,

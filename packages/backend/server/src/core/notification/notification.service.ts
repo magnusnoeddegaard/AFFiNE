@@ -2,7 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { NotificationModel, NotificationType } from '../../models/notification';
 import { ConfigService } from '@nestjs/config';
 import { MailService } from '../../base/mail/mail.service';
-import { QueueService } from '../../base/queue/queue.service';
+import { QueueService } from '../../base/queue';
+
 
 /**
  * Service for handling notification delivery
@@ -205,5 +206,23 @@ export class NotificationService {
     cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
     
     return this.notificationModel.deleteOldNotifications(cutoffDate);
+  }
+  
+  /**
+   * Find notification by ID
+   * @param id Notification ID
+   * @returns The notification or null
+   */
+  async findNotificationById(id: string): Promise<any> {
+    return this.notificationModel.findById(id);
+  }
+  
+  /**
+   * Count notifications for a user
+   * @param userId User ID
+   * @returns Count of notifications
+   */
+  async countUserNotifications(userId: string): Promise<number> {
+    return this.notificationModel.count({ userId: userId });
   }
 }

@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { MetricsService } from './metrics.service';
 
+export { MetricsService } from './metrics.service';
+
 @Module({
   providers: [MetricsService],
   exports: [MetricsService],

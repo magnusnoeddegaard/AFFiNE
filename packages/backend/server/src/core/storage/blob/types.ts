@@ -47,6 +47,9 @@ export class Blob {
 
   @Field(() => Date)
   createdAt: Date;
+
+  @Field(() => Object, { nullable: true })
+  metadata?: Record<string, any>;
 }
 
 @InputType()
@@ -69,4 +72,8 @@ export class UploadBlobInput {
   @IsString()
   @IsOptional()
   workspaceId?: string;
+
+  @Field(() => Object, { nullable: true })
+  @IsOptional()
+  metadata?: Record<string, any>;
 }

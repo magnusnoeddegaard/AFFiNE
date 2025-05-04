@@ -50,13 +50,13 @@ export class BlobService {
     const key = `${keyPrefix}/${input.workspaceId || 'personal'}/${blobId}${fileExtension ? '.' + fileExtension : ''}`;
 
     // Upload the file to storage
-    await this.storageService.put(key, file, {
+    await this.storageService.storeFile(key, file, {
       contentType: fileType,
-      isPublic: true,
+      isPublic: "true",
     });
 
     // Get the public URL for the uploaded file
-    const url = await this.storageService.getPublicUrl(key);
+    const url = await this.storageService.getFileUrl(key);
 
     // Save the blob metadata in the database
     const blob = await this.prisma.blob.create({
@@ -71,6 +71,7 @@ export class BlobService {
         createdById: userId,
         documentId: input.documentId,
         workspaceId: input.workspaceId,
+        metadata: input.metadata ? JSON.stringify(input.metadata) : null,
       },
     });
 
@@ -86,6 +87,7 @@ export class BlobService {
       documentId: blob.documentId,
       workspaceId: blob.workspaceId,
       createdAt: blob.createdAt,
+      metadata: blob.metadata ? JSON.parse(blob.metadata) : null,
     };
   }
 
@@ -143,7 +145,7 @@ export class BlobService {
     }
 
     // Delete from storage
-    await this.storageService.delete(blob.key);
+    await this.storageService.deleteFile(blob.key);
 
     // Delete from database
     await this.prisma.blob.delete({
@@ -166,7 +168,7 @@ export class BlobService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return blobs.map((blob) => ({
+    return blobs.map((blob: any) => ({
       id: blob.id,
       key: blob.key,
       name: blob.name,
@@ -194,7 +196,7 @@ export class BlobService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return blobs.map((blob) => ({
+    return blobs.map((blob: any) => ({
       id: blob.id,
       key: blob.key,
       name: blob.name,
@@ -212,7 +214,7 @@ export class BlobService {
   // Helper methods
   private getFileExtension(filename: string): string | null {
     const parts = filename.split('.');
-    return parts.length > 1 ? parts.pop().toLowerCase() : null;
+    return parts.length > 1 ? parts.pop()?.toLowerCase() || null : null;
   }
 
   // Access control helpers

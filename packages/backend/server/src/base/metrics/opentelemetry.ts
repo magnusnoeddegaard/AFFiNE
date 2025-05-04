@@ -15,8 +15,9 @@ export async function setupOpenTelemetry() {
     return;
   }
 
+  const metricsPort = parseInt(process.env.METRICS_PORT || '9464', 10);
   const prometheusExporter = new PrometheusExporter({
-    port: parseInt(process.env.METRICS_PORT || '9464', 10),
+    port: metricsPort,
   });
 
   const sdk = new NodeSDK({
@@ -53,5 +54,5 @@ export async function setupOpenTelemetry() {
   process.on('SIGINT', shutdownHandler);
 
   console.log('OpenTelemetry initialized successfully');
-  console.log(`Prometheus metrics available at http://localhost:${prometheusExporter.port}/metrics`);
+  console.log(`Prometheus metrics available at http://localhost:${metricsPort}/metrics`);
 }

@@ -1,23 +1,30 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { randomUUID } from 'crypto';
+
+import { MutexService } from '../../../base/mutex/mutex.service';
 import { PrismaService } from '../../../base/prisma/prisma.service';
 import { TeamModel } from '../../../models/team';
 import { TeamMemberModel } from '../../../models/team-member';
+// Use the User type from types.ts instead of model import
+// import { User } from '../../../models/user';
+import { UserModel } from '../../../models/user';
+import { NotificationService } from '../../notification/notification.service';
+import { NotificationType } from '../../../models/notification';
 import { PermissionService } from '../../permission/service';
 import { PermissionLevel, ResourceType } from '../../permission/types';
-import { MutexService } from '../../../base/mutex/mutex.service';
-import { 
-  CreateTeamInput, 
-  UpdateTeamInput, 
-  AddTeamMemberInput, 
-  UpdateTeamMemberRoleInput,
-  TeamMemberRole,
+import {
+  AddTeamMemberInput,
   BulkTeamMemberInput,
+  CreateTeamInput,
+  TeamMemberRole,
+  UpdateTeamInput,
+  UpdateTeamMemberRoleInput,
 } from './types';
-import { NotificationService } from '../../notification/notification.service';
-import { NotificationType } from '../../notification/types';
-import { randomUUID } from 'crypto';
-import { User } from '../../../models/user';
-import { UserModel } from '../../../models/user';
 
 @Injectable()
 export class TeamService {
@@ -30,7 +37,7 @@ export class TeamService {
     private readonly userModel: UserModel,
     private readonly permissionService: PermissionService,
     private readonly mutexService: MutexService,
-    private readonly notificationService: NotificationService,
+    private readonly notificationService: NotificationService
   ) {}
 
   /**
@@ -41,16 +48,16 @@ export class TeamService {
    */
   async createTeam(userId: string, input: CreateTeamInput) {
     this.logger.debug(`Creating team for workspace ${input.workspaceId}`);
-    
+
     // Check if user has ADMIN permission in the workspace
     await this.permissionService.enforcePermission(
       input.workspaceId,
       ResourceType.WORKSPACE,
       userId,
-      PermissionLevel.ADMIN,
+      PermissionLevel.ADMIN
     );
-    
-    return this.prisma.$transaction(async (tx) => {
+
+    return this.prisma.$transaction(async (tx: any) => {
       // Create the team
       const team = await tx.team.create({
         data: {
@@ -69,7 +76,7 @@ export class TeamService {
           },
         },
       });
-      
+
       // Add the creator as a team member
       await tx.teamMember.create({
         data: {
@@ -80,7 +87,7 @@ export class TeamService {
           addedAt: new Date(),
         },
       });
-      
+
       return team;
     });
   }
@@ -92,13 +99,13 @@ export class TeamService {
    */
   async getTeam(teamId: string) {
     this.logger.debug(`Getting team ${teamId}`);
-    
+
     const team = await this.teamModel.findById(teamId);
-    
+
     if (!team) {
       throw new NotFoundException(`Team with ID ${teamId} not found`);
     }
-    
+
     return team;
   }
 
@@ -111,21 +118,23 @@ export class TeamService {
    */
   async updateTeam(teamId: string, userId: string, input: UpdateTeamInput) {
     this.logger.debug(`Updating team ${teamId}`);
-    
+
     const team = await this.getTeam(teamId);
-    
+
     // User must be workspace admin or team leader
     await this.enforceTeamAdminPermission(team.workspaceId, teamId, userId);
-    
+
     return this.teamModel.update(teamId, {
       name: input.name,
       description: input.description,
-      ...(input.color ? { 
-        settings: {
-          ...team.settings,
-          color: input.color,
-        }
-      } : {}),
+      ...(input.color
+        ? {
+            settings: {
+              ...team.settings,
+              color: input.color,
+            },
+          }
+        : {}),
     });
   }
 
@@ -137,25 +146,25 @@ export class TeamService {
    */
   async deleteTeam(teamId: string, userId: string) {
     this.logger.debug(`Deleting team ${teamId}`);
-    
+
     const team = await this.getTeam(teamId);
-    
+
     // Check if user has ADMIN permission in the workspace
     await this.permissionService.enforcePermission(
       team.workspaceId,
       ResourceType.WORKSPACE,
       userId,
-      PermissionLevel.ADMIN,
+      PermissionLevel.ADMIN
     );
-    
+
     // Use mutex to prevent race conditions
-    return this.mutexService.runWithLock(`team:${teamId}:delete`, async () => {
-      return this.prisma.$transaction(async (tx) => {
+    return this.mutexService.withLock(`team:${teamId}:delete`, async () => {
+      return this.prisma.$transaction(async (tx: any) => {
         // Delete all team members
         await tx.teamMember.deleteMany({
           where: { teamId },
         });
-        
+
         // Delete the team
         return tx.team.delete({
           where: { id: teamId },
@@ -172,15 +181,15 @@ export class TeamService {
    */
   async getWorkspaceTeams(workspaceId: string, userId: string) {
     this.logger.debug(`Getting teams for workspace ${workspaceId}`);
-    
+
     // Check if user has access to the workspace
     await this.permissionService.enforcePermission(
       workspaceId,
       ResourceType.WORKSPACE,
       userId,
-      PermissionLevel.READ,
+      PermissionLevel.READ
     );
-    
+
     return this.teamModel.findByWorkspace(workspaceId);
   }
 
@@ -191,7 +200,7 @@ export class TeamService {
    */
   async getUserTeams(userId: string) {
     this.logger.debug(`Getting teams for user ${userId}`);
-    
+
     return this.teamModel.findByMember(userId);
   }
 
@@ -203,21 +212,21 @@ export class TeamService {
    */
   async getTeamMembers(teamId: string, userId: string) {
     this.logger.debug(`Getting members for team ${teamId}`);
-    
+
     const team = await this.getTeam(teamId);
-    
+
     // Check if user has access to the workspace
     await this.permissionService.enforcePermission(
       team.workspaceId,
       ResourceType.WORKSPACE,
       userId,
-      PermissionLevel.READ,
+      PermissionLevel.READ
     );
-    
+
     const members = await this.teamMemberModel.findByTeam(teamId, {
       include: { user: true },
     });
-    
+
     return members;
   }
 
@@ -229,12 +238,16 @@ export class TeamService {
    */
   async addTeamMember(userId: string, input: AddTeamMemberInput) {
     this.logger.debug(`Adding member ${input.userId} to team ${input.teamId}`);
-    
+
     const team = await this.getTeam(input.teamId);
-    
+
     // Check if user is workspace admin or team admin
-    await this.enforceTeamAdminPermission(team.workspaceId, input.teamId, userId);
-    
+    await this.enforceTeamAdminPermission(
+      team.workspaceId,
+      input.teamId,
+      userId
+    );
+
     // Check if the user to add is a member of the workspace
     const workspaceMember = await this.prisma.workspaceUser.findFirst({
       where: {
@@ -242,24 +255,26 @@ export class TeamService {
         userId: input.userId,
       },
     });
-    
+
     if (!workspaceMember) {
-      throw new ForbiddenException(`User ${input.userId} is not a member of the workspace`);
+      throw new ForbiddenException(
+        `User ${input.userId} is not a member of the workspace`
+      );
     }
-    
+
     // Add the user to the team
     const member = await this.teamMemberModel.addMember(
       input.teamId,
       input.userId,
-      input.role || TeamMemberRole.MEMBER,
-      userId,
+      input.role || (TeamMemberRole.MEMBER as any),
+      userId
     );
-    
+
     // Send a notification to the user
     const user = await this.userModel.findById(userId);
     await this.notificationService.createNotification(
       input.userId,
-      NotificationType.TEAM_INVITATION,
+      NotificationType.WORKSPACE_INVITATION, // Now using correct NotificationType from models
       'Team invitation',
       `You have been added to the team "${team.name}" by ${user?.name || 'a team admin'}`,
       {
@@ -268,9 +283,9 @@ export class TeamService {
         inviterId: userId,
         workspaceId: team.workspaceId,
       },
-      true, // Send email
+      true // Send email
     );
-    
+
     return member;
   }
 
@@ -286,38 +301,43 @@ export class TeamService {
     teamId: string,
     memberId: string,
     userId: string,
-    input: UpdateTeamMemberRoleInput,
+    input: UpdateTeamMemberRoleInput
   ) {
     this.logger.debug(`Updating role for member ${memberId} in team ${teamId}`);
-    
+
     const team = await this.getTeam(teamId);
-    
+
     // Check if user is workspace admin or team admin
     await this.enforceTeamAdminPermission(team.workspaceId, teamId, userId);
-    
+
     // Get the current role
-    const member = await this.teamMemberModel.findByTeamAndUser(teamId, memberId);
-    
+    const member = await this.teamMemberModel.findByTeamAndUser(
+      teamId,
+      memberId
+    );
+
     if (!member) {
-      throw new NotFoundException(`User ${memberId} is not a member of team ${teamId}`);
+      throw new NotFoundException(
+        `User ${memberId} is not a member of team ${teamId}`
+      );
     }
-    
+
     // Update the role
     const updatedMember = await this.teamMemberModel.updateRole(
       teamId,
       memberId,
-      input.role,
+      input.role as any
     );
-    
+
     // If promoting to ADMIN, update the team leader if needed
     if (input.role === TeamMemberRole.ADMIN && !team.leaderId) {
       await this.teamModel.updateLeader(teamId, memberId);
     }
-    
+
     // Send a notification to the user
     await this.notificationService.createNotification(
       memberId,
-      NotificationType.TEAM_ROLE_CHANGED,
+      NotificationType.WORKSPACE_ROLE_CHANGED, // Now using correct NotificationType from models
       'Team role updated',
       `Your role in the team "${team.name}" has been updated to ${input.role}`,
       {
@@ -325,9 +345,9 @@ export class TeamService {
         teamName: team.name,
         role: input.role,
         updatedBy: userId,
-      },
+      }
     );
-    
+
     return updatedMember;
   }
 
@@ -340,35 +360,35 @@ export class TeamService {
    */
   async removeTeamMember(teamId: string, memberId: string, userId: string) {
     this.logger.debug(`Removing member ${memberId} from team ${teamId}`);
-    
+
     const team = await this.getTeam(teamId);
-    
+
     // Check if user is workspace admin or team admin
     await this.enforceTeamAdminPermission(team.workspaceId, teamId, userId);
-    
+
     // Cannot remove the team leader
     if (team.leaderId === memberId) {
       throw new ForbiddenException('Cannot remove the team leader');
     }
-    
+
     // Remove the member
     const result = await this.teamMemberModel.removeMember(teamId, memberId);
-    
+
     // Send a notification to the user
     if (result) {
       await this.notificationService.createNotification(
         memberId,
-        NotificationType.TEAM_ROLE_CHANGED,
+        NotificationType.SYSTEM, // Using SYSTEM type since there's no specific "removed" type
         'Removed from team',
         `You have been removed from the team "${team.name}"`,
         {
           teamId,
           teamName: team.name,
           removedBy: userId,
-        },
+        }
       );
     }
-    
+
     return result;
   }
 
@@ -379,13 +399,19 @@ export class TeamService {
    * @returns Array of added members
    */
   async addTeamMembers(userId: string, input: BulkTeamMemberInput) {
-    this.logger.debug(`Adding ${input.userIds.length} members to team ${input.teamId}`);
-    
+    this.logger.debug(
+      `Adding ${input.userIds.length} members to team ${input.teamId}`
+    );
+
     const team = await this.getTeam(input.teamId);
-    
+
     // Check if user is workspace admin or team admin
-    await this.enforceTeamAdminPermission(team.workspaceId, input.teamId, userId);
-    
+    await this.enforceTeamAdminPermission(
+      team.workspaceId,
+      input.teamId,
+      userId
+    );
+
     // Verify all users are workspace members
     const workspaceMembers = await this.prisma.workspaceUser.findMany({
       where: {
@@ -394,27 +420,31 @@ export class TeamService {
       },
       select: { userId: true },
     });
-    
-    const validUserIds = workspaceMembers.map(m => m.userId);
-    
+
+    const validUserIds = workspaceMembers.map(
+      (m: { userId: string }) => m.userId
+    );
+
     if (validUserIds.length !== input.userIds.length) {
-      throw new ForbiddenException('Some users are not members of the workspace');
+      throw new ForbiddenException(
+        'Some users are not members of the workspace'
+      );
     }
-    
+
     // Add the members
     const members = await this.teamMemberModel.addMembers(
       input.teamId,
       validUserIds,
-      input.role || TeamMemberRole.MEMBER,
-      userId,
+      input.role || (TeamMemberRole.MEMBER as any),
+      userId
     );
-    
+
     // Send notifications to all users
     const user = await this.userModel.findById(userId);
     for (const memberId of validUserIds) {
       await this.notificationService.createNotification(
         memberId,
-        NotificationType.TEAM_INVITATION,
+        NotificationType.WORKSPACE_INVITATION, // Using correct NotificationType from models
         'Team invitation',
         `You have been added to the team "${team.name}" by ${user?.name || 'a team admin'}`,
         {
@@ -423,10 +453,10 @@ export class TeamService {
           inviterId: userId,
           workspaceId: team.workspaceId,
         },
-        true, // Send email
+        true // Send email
       );
     }
-    
+
     return members;
   }
 
@@ -439,35 +469,35 @@ export class TeamService {
    */
   async removeTeamMembers(teamId: string, userIds: string[], userId: string) {
     this.logger.debug(`Removing ${userIds.length} members from team ${teamId}`);
-    
+
     const team = await this.getTeam(teamId);
-    
+
     // Check if user is workspace admin or team admin
     await this.enforceTeamAdminPermission(team.workspaceId, teamId, userId);
-    
+
     // Cannot remove the team leader
     if (team.leaderId && userIds.includes(team.leaderId)) {
       throw new ForbiddenException('Cannot remove the team leader');
     }
-    
+
     // Remove the members
     const count = await this.teamMemberModel.removeMembers(teamId, userIds);
-    
+
     // Send notifications to all users
     for (const memberId of userIds) {
       await this.notificationService.createNotification(
         memberId,
-        NotificationType.TEAM_ROLE_CHANGED,
+        NotificationType.SYSTEM, // Using SYSTEM type since there's no specific "removed" type
         'Removed from team',
         `You have been removed from the team "${team.name}"`,
         {
           teamId,
           teamName: team.name,
           removedBy: userId,
-        },
+        }
       );
     }
-    
+
     return count;
   }
 
@@ -478,42 +508,55 @@ export class TeamService {
    * @param userId The user transferring leadership
    * @returns The updated team
    */
-  async transferTeamLeadership(teamId: string, newLeaderId: string, userId: string) {
-    this.logger.debug(`Transferring leadership of team ${teamId} to ${newLeaderId}`);
-    
+  async transferTeamLeadership(
+    teamId: string,
+    newLeaderId: string,
+    userId: string
+  ) {
+    this.logger.debug(
+      `Transferring leadership of team ${teamId} to ${newLeaderId}`
+    );
+
     const team = await this.getTeam(teamId);
-    
+
     // Check if user is workspace admin or current team leader
     if (team.leaderId !== userId) {
       await this.permissionService.enforcePermission(
         team.workspaceId,
         ResourceType.WORKSPACE,
         userId,
-        PermissionLevel.ADMIN,
+        PermissionLevel.ADMIN
       );
     }
-    
+
     // Verify the new leader is a team member
-    const member = await this.teamMemberModel.findByTeamAndUser(teamId, newLeaderId);
-    
+    const member = await this.teamMemberModel.findByTeamAndUser(
+      teamId,
+      newLeaderId
+    );
+
     if (!member) {
-      throw new NotFoundException(`User ${newLeaderId} is not a member of team ${teamId}`);
+      throw new NotFoundException(
+        `User ${newLeaderId} is not a member of team ${teamId}`
+      );
     }
-    
+
     // Transfer leadership
     try {
       await this.teamMemberModel.transferLeadership(teamId, newLeaderId);
     } catch (error) {
-      throw new ForbiddenException(`Failed to transfer leadership: ${error.message}`);
+      throw new ForbiddenException(
+        `Failed to transfer leadership: ${error.message}`
+      );
     }
-    
+
     // Update the team
     const updatedTeam = await this.teamModel.updateLeader(teamId, newLeaderId);
-    
+
     // Send notifications to the new leader
     await this.notificationService.createNotification(
       newLeaderId,
-      NotificationType.TEAM_ROLE_CHANGED,
+      NotificationType.WORKSPACE_ROLE_CHANGED, // Using WORKSPACE_ROLE_CHANGED for leadership transfer
       'Team leadership transferred',
       `You are now the leader of the team "${team.name}"`,
       {
@@ -521,9 +564,9 @@ export class TeamService {
         teamName: team.name,
         previousLeaderId: team.leaderId,
         transferredBy: userId,
-      },
+      }
     );
-    
+
     return updatedTeam;
   }
 
@@ -545,28 +588,32 @@ export class TeamService {
    * @param userId The user ID
    * @returns True if the user is a team admin
    */
-  async isTeamAdmin(workspaceId: string, teamId: string, userId: string): Promise<boolean> {
+  async isTeamAdmin(
+    workspaceId: string,
+    teamId: string,
+    userId: string
+  ): Promise<boolean> {
     // Check if user is workspace admin
     const workspaceCheck = await this.permissionService.checkPermission(
       workspaceId,
       ResourceType.WORKSPACE,
       userId,
-      PermissionLevel.ADMIN,
+      PermissionLevel.ADMIN
     );
-    
+
     if (workspaceCheck.hasPermission) {
       return true;
     }
-    
+
     // Check if user is team leader
     const team = await this.getTeam(teamId);
     if (team.leaderId === userId) {
       return true;
     }
-    
+
     // Check if user is team admin
     const member = await this.teamMemberModel.findByTeamAndUser(teamId, userId);
-    return member?.role === TeamMemberRole.ADMIN;
+    return (member?.role as any) === TeamMemberRole.ADMIN;
   }
 
   /**
@@ -579,12 +626,14 @@ export class TeamService {
   private async enforceTeamAdminPermission(
     workspaceId: string,
     teamId: string,
-    userId: string,
+    userId: string
   ): Promise<void> {
     const isAdmin = await this.isTeamAdmin(workspaceId, teamId, userId);
-    
+
     if (!isAdmin) {
-      throw new ForbiddenException('You need admin permission to perform this action');
+      throw new ForbiddenException(
+        'You need admin permission to perform this action'
+      );
     }
   }
 }

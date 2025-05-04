@@ -1,10 +1,18 @@
 import { Module } from '@nestjs/common';
-import { AuthService } from './service';
+import { ConfigService } from '@nestjs/config';
+import { JwtModule } from '@nestjs/jwt';
+
+import { ConfigModule } from '../../base/config';
+import { LoggerModule } from '../../base/logger';
+import { PrismaModule } from '../../base/prisma';
+import { RedisModule } from '../../base/redis';
 import { AuthController } from './controller';
 import { AuthResolver } from './resolver';
+import { AuthService } from './service';
 import { SessionService } from './session';
-import { JwtModule } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
+
+export { AuthService } from './service';
+export { SessionService } from './session';
 
 @Module({
   imports: [
@@ -15,6 +23,10 @@ import { ConfigService } from '@nestjs/config';
         signOptions: { expiresIn: '7d' },
       }),
     }),
+    ConfigModule,
+    PrismaModule,
+    RedisModule,
+    LoggerModule
   ],
   providers: [AuthService, AuthResolver, SessionService],
   controllers: [AuthController],

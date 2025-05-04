@@ -1,25 +1,34 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../base/prisma/prisma.service';
-import { CreatePermissionInput, PermissionCheck, PermissionLevel, ResourceType, UpdatePermissionInput } from './types';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
+
+import { PrismaService } from '../../base/prisma/prisma.service';
+import {
+  CreatePermissionInput,
+  PermissionCheck,
+  PermissionLevel,
+  ResourceType,
+  UpdatePermissionInput,
+} from './types';
 
 @Injectable()
 export class PermissionService {
   private readonly logger = new Logger(PermissionService.name);
 
   constructor(private readonly prisma: PrismaService) {}
-  
+
   async getPermissionById(id: string) {
     this.logger.debug(`Getting permission by ID ${id}`);
-    
+
     return this.prisma.permission.findUnique({
       where: { id },
     });
   }
 
   async createPermission(input: CreatePermissionInput) {
-    this.logger.debug(`Creating permission for resource ${input.resourceId} for user ${input.userId}`);
-    
+    this.logger.debug(
+      `Creating permission for resource ${input.resourceId} for user ${input.userId}`
+    );
+
     return this.prisma.permission.create({
       data: {
         resourceId: input.resourceId,
@@ -30,9 +39,15 @@ export class PermissionService {
     });
   }
 
-  async getPermission(resourceId: string, resourceType: ResourceType, userId: string) {
-    this.logger.debug(`Getting permission for resource ${resourceId} for user ${userId}`);
-    
+  async getPermission(
+    resourceId: string,
+    resourceType: ResourceType,
+    userId: string
+  ) {
+    this.logger.debug(
+      `Getting permission for resource ${resourceId} for user ${userId}`
+    );
+
     const permission = await this.prisma.permission.findFirst({
       where: {
         resourceId,
@@ -50,7 +65,7 @@ export class PermissionService {
 
   async updatePermission(id: string, input: UpdatePermissionInput) {
     this.logger.debug(`Updating permission ${id}`);
-    
+
     const permission = await this.prisma.permission.findUnique({
       where: { id },
     });
@@ -67,7 +82,7 @@ export class PermissionService {
 
   async deletePermission(id: string) {
     this.logger.debug(`Deleting permission ${id}`);
-    
+
     const permission = await this.prisma.permission.findUnique({
       where: { id },
     });
@@ -83,7 +98,7 @@ export class PermissionService {
 
   async getResourcePermissions(resourceId: string, resourceType: ResourceType) {
     this.logger.debug(`Getting permissions for resource ${resourceId}`);
-    
+
     return this.prisma.permission.findMany({
       where: {
         resourceId,
@@ -94,7 +109,7 @@ export class PermissionService {
 
   async getUserPermissions(userId: string, resourceType?: ResourceType) {
     this.logger.debug(`Getting permissions for user ${userId}`);
-    
+
     return this.prisma.permission.findMany({
       where: {
         userId,
@@ -107,11 +122,17 @@ export class PermissionService {
     resourceId: string,
     resourceType: ResourceType,
     userId: string,
-    requiredLevel: PermissionLevel,
+    requiredLevel: PermissionLevel
   ): Promise<PermissionCheck> {
-    this.logger.debug(`Checking permission for resource ${resourceId} for user ${userId}`);
-    
-    const permission = await this.getPermission(resourceId, resourceType, userId);
+    this.logger.debug(
+      `Checking permission for resource ${resourceId} for user ${userId}`
+    );
+
+    const permission = await this.getPermission(
+      resourceId,
+      resourceType,
+      userId
+    );
 
     if (!permission) {
       return {
@@ -121,7 +142,9 @@ export class PermissionService {
 
     const permissionLevels = Object.values(PermissionLevel);
     const requiredLevelIndex = permissionLevels.indexOf(requiredLevel);
-    const currentLevelIndex = permissionLevels.indexOf(permission.level as PermissionLevel);
+    const currentLevelIndex = permissionLevels.indexOf(
+      permission.level as PermissionLevel
+    );
 
     return {
       hasPermission: currentLevelIndex >= requiredLevelIndex,
@@ -129,26 +152,66 @@ export class PermissionService {
     };
   }
 
+  /**
+   * Check if a user has the required permission level for a resource
+   * @param resourceId The resource ID
+   * @param resourceType The resource type
+   * @param userId The user ID
+   * @param requiredLevel The required permission level
+   * @returns Boolean indicating if the user has the required permission
+   */
+  async hasPermission(
+    resourceId: string,
+    resourceType: ResourceType,
+    userId: string,
+    requiredLevel: PermissionLevel
+  ): Promise<boolean> {
+    this.logger.debug(
+      `Checking if user ${userId} has ${requiredLevel} permission for ${resourceType} ${resourceId}`
+    );
+
+    const check = await this.checkPermission(
+      resourceId,
+      resourceType,
+      userId,
+      requiredLevel
+    );
+    return check.hasPermission;
+  }
+
   async enforcePermission(
     resourceId: string,
     resourceType: ResourceType,
     userId: string,
-    requiredLevel: PermissionLevel,
+    requiredLevel: PermissionLevel
   ): Promise<void> {
-    this.logger.debug(`Enforcing permission for resource ${resourceId} for user ${userId}`);
-    
-    const check = await this.checkPermission(resourceId, resourceType, userId, requiredLevel);
+    this.logger.debug(
+      `Enforcing permission for resource ${resourceId} for user ${userId}`
+    );
+
+    const check = await this.checkPermission(
+      resourceId,
+      resourceType,
+      userId,
+      requiredLevel
+    );
 
     if (!check.hasPermission) {
       throw new ForbiddenException(
-        `User ${userId} does not have ${requiredLevel} permission for ${resourceType} ${resourceId}`,
+        `User ${userId} does not have ${requiredLevel} permission for ${resourceType} ${resourceId}`
       );
     }
   }
 
-  async setOwnerPermission(resourceId: string, resourceType: ResourceType, userId: string) {
-    this.logger.debug(`Setting owner permission for resource ${resourceId} for user ${userId}`);
-    
+  async setOwnerPermission(
+    resourceId: string,
+    resourceType: ResourceType,
+    userId: string
+  ) {
+    this.logger.debug(
+      `Setting owner permission for resource ${resourceId} for user ${userId}`
+    );
+
     const existing = await this.getPermission(resourceId, resourceType, userId);
 
     if (existing) {
